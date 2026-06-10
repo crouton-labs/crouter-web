@@ -10,6 +10,9 @@ import type { CanvasMsg } from '../../shared/protocol.js';
 export interface CanvasSocketCallbacks {
   onMessage: (msg: CanvasMsg) => void;
   onOpen?: () => void;
+  /** Fired only on an UNEXPECTED transport drop (before a reconnect). An
+   * intentional `close()` is silent so navigation teardown does not flap
+   * connectivity. */
   onClose?: () => void;
 }
 
@@ -46,8 +49,8 @@ export function openCanvasSocket(cb: CanvasSocketCallbacks): CanvasSocket {
       if (msg && msg.type === 'canvas') cb.onMessage(msg);
     });
     ws.addEventListener('close', () => {
+      if (closed) return; // intentional teardown — no flap, no reconnect
       cb.onClose?.();
-      if (closed) return;
       scheduleReconnect();
     });
     ws.addEventListener('error', () => {

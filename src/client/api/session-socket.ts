@@ -12,7 +12,9 @@ export interface SessionSocketCallbacks {
   onMessage: (msg: WsServerMsg) => void;
   /** Fired on every successful (re)open. */
   onOpen?: () => void;
-  /** Fired on every close (transport-level), before a reconnect is scheduled. */
+  /** Fired only on an UNEXPECTED transport drop (before a reconnect). An
+   * intentional `close()` is silent so navigation teardown does not flap
+   * connectivity. */
   onClose?: () => void;
 }
 
@@ -53,8 +55,8 @@ export function openSessionSocket(
       cb.onMessage(msg);
     });
     ws.addEventListener('close', () => {
+      if (closed) return; // intentional teardown — no flap, no reconnect
       cb.onClose?.();
-      if (closed) return;
       scheduleReconnect();
     });
     ws.addEventListener('error', () => {
