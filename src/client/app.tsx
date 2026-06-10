@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppRoutes, ReconnectingBanner } from "./app-routes.js";
 import { ProfileProvider } from "./profile/provider.js";
+import { AppShell } from "./shell/app-shell.js";
 
 export function App() {
   return (
@@ -12,7 +13,9 @@ export function App() {
       <BrowserRouter>
         <TooltipProvider delayDuration={300}>
           <ReconnectingBanner />
-          <AppRoutes />
+          <AppShell>
+            <AppRoutes />
+          </AppShell>
         </TooltipProvider>
       </BrowserRouter>
     </ProfileProvider>

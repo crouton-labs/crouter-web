@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils.js';
 import type { BrokerStatus, NodeDetail, SessionState } from '../../shared/protocol.js';
 import type { NodeChrome } from '../store/session-store.js';
+import { useCapability } from '../profile/provider.js';
 
 /** React-compatible subset of the session store — plain values, not signal accessors. */
 interface ChromeBarStore {
@@ -43,7 +44,29 @@ function livePillStatus(
   return streaming ? 'active' : 'idle'; // live broker — reflect live activity
 }
 
-/** Identity line — the `header` slot. Always present (no capability). */
+/**
+ * Status as a single plain-language word (Studio slim header). Derived from the
+ * LIVE connection/broker state, not the (possibly stale) DB row — same honesty
+ * rule as `livePillStatus`, just worded softly for a consumer.
+ */
+function statusWord(
+  d: NodeDetail,
+  source: 'broker' | 'static',
+  brokerStatus: BrokerStatus,
+  streaming: boolean,
+): string {
+  if (source === 'static') {
+    return d.status === 'done' || d.status === 'dead' || d.status === 'canceled'
+      ? 'Finished'
+      : 'Paused';
+  }
+  if (brokerStatus === 'down' || brokerStatus === 'reconnecting') return 'Reconnecting…';
+  return streaming ? 'Working…' : 'Idle';
+}
+
+/** Identity line — the `header` slot. Always present (no capability), but the
+ *  internals audience (Operator) sees the full identity row while a consumer
+ *  audience (Studio) sees a slim title + a status word. Capability-driven. */
 export function TitleBar(props: {
   store: ChromeBarStore;
   detail: NodeDetail | null;
@@ -51,6 +74,27 @@ export function TitleBar(props: {
   const dormant = props.store.source === 'static';
   const streaming = props.store.state?.isStreaming ?? false;
   const d = props.detail;
+  const showInternals = useCapability('node.internals');
+
+  if (!showInternals) {
+    const word = d ? statusWord(d, props.store.source, props.store.brokerStatus, streaming) : '…';
+    const working = word === 'Working…';
+    return (
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="text-lg font-semibold truncate">{d?.name ?? '…'}</span>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 text-sm',
+            working ? 'text-success' : 'text-muted-foreground',
+          )}
+        >
+          {working && <span className="size-1.5 animate-pulse rounded-full bg-success" />}
+          {word}
+        </span>
+      </div>
+    );
+  }
+
   const pillStatus = d
     ? livePillStatus(d, props.store.source, props.store.brokerStatus, streaming)
     : null;

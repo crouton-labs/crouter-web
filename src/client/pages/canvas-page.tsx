@@ -15,10 +15,8 @@ import type {
   NodeSummary,
   SpawnRequest,
 } from '../../shared/protocol.js';
-import { RestError, spawnNode, getCanvas } from '../api/rest.js';
-import { openCanvasSocket } from '../api/canvas-socket.js';
-import type { CanvasSocket } from '../api/canvas-socket.js';
-import { useServerStatus } from '../lib/server-status.js';
+import { RestError, spawnNode } from '../api/rest.js';
+import { useCanvasStore } from '../lib/use-canvas-store.js';
 import { cn } from '@/lib/utils.js';
 import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
@@ -43,7 +41,6 @@ import {
 import { Textarea } from '@/components/ui/textarea.js';
 
 const NON_ENTERABLE_REASON = 'hosted in a tmux pane — open it in your terminal';
-const POLL_INTERVAL_MS = 2000;
 
 /** A node plus its resolved children (the `subscribes_to` forest, B.2). */
 interface ForestNode {
@@ -63,72 +60,6 @@ function buildForest(nodes: NodeSummary[]): ForestNode[] {
     else roots.push(fn);
   }
   return roots;
-}
-
-/** Self-managing canvas store hook. Connects on mount, disposes on unmount. */
-function useCanvasStore(): { nodes: NodeSummary[]; generatedAt: string | null } {
-  const [nodes, setNodes] = useState<NodeSummary[]>([]);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-
-  useEffect(() => {
-    let disposed = false;
-    let wsLive = false;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-    let socket: CanvasSocket | null = null;
-
-    const apply = (rows: NodeSummary[], at: string): void => {
-      if (disposed) return;
-      setNodes(rows);
-      setGeneratedAt(at);
-    };
-
-    const poll = async (): Promise<void> => {
-      if (disposed || wsLive) return;
-      try {
-        const snap = await getCanvas();
-        if (!wsLive && !disposed) apply(snap.nodes, snap.generated_at);
-      } catch {
-        /* transient — the next interval retries */
-      }
-    };
-
-    const startPolling = (): void => {
-      if (pollTimer || disposed) return;
-      void poll();
-      pollTimer = setInterval(() => void poll(), POLL_INTERVAL_MS);
-    };
-
-    const stopPolling = (): void => {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    };
-
-    startPolling();
-
-    socket = openCanvasSocket({
-      onMessage: (msg) => apply(msg.nodes, msg.generated_at),
-      onOpen: () => {
-        wsLive = true;
-        useServerStatus.getState().setReachable(true);
-        stopPolling();
-      },
-      onClose: () => {
-        wsLive = false;
-        useServerStatus.getState().setReachable(false);
-        startPolling();
-      },
-    });
-
-    return () => {
-      disposed = true;
-      stopPolling();
-      socket?.close();
-    };
-  }, []);
-
-  return { nodes, generatedAt };
 }
 
 // ─── filtering (§5.4) ──────────────────────────────────────────────

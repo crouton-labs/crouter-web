@@ -11,7 +11,7 @@
  * down/reconnecting freezes input.
  */
 
-import { useState, useEffect, useCallback, Fragment, type KeyboardEvent, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Command, NodeDetail, ThinkingLevel } from '../../shared/protocol.js';
 import type { Capability } from '../profile/types.js';
@@ -19,12 +19,13 @@ import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } f
 import { useSessionStore, type SessionStore } from '../store/session-store.js';
 import { TitleBar, ChromePanel } from '../chrome/chrome-bar.js';
 import { Presence } from '../chrome/presence.js';
-import { useTerm, useGrants } from '../profile/provider.js';
-import { Slot, actionsFor, type SlotRegistry } from '../profile/slots.js';
+import { useTerm, useGrants, useCapability, useProfile } from '../profile/provider.js';
+import { Slot, Can, actionsFor, type SlotRegistry } from '../profile/slots.js';
 import { cn } from '@/lib/utils.js';
 import { CommandPalette } from '../command-palette/palette.js';
 import { ExtensionDialog } from '../dialogs/extension-dialog.js';
 import { MessageList } from '../session/message-list.js';
+import { ActivityRail } from '../session/activity-rail.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
 import {
@@ -78,6 +79,18 @@ export function NodePage(props: { id: string }) {
   /** Live driving needs the controller slot on a live, up broker AND a live server bridge. */
   const canDrive = isController && !dormant && brokerUp && store.serverConnected;
 
+  // --- audience flags (capability-driven, never profile-name) ---
+  // An audience without the manual arbitration UI (Studio) holds its own
+  // conversation: it auto-requests control on open and renders contention as a
+  // soft line instead of a request/release toolbar.
+  const showArbitration = useCapability('node.arbitration');
+  const showInternals = useCapability('node.internals');
+  const showCommands = useCapability('commands.palette');
+  const home = useProfile().nav[0] ?? { label: 'Home', path: '/' };
+  // Soft contention: someone else holds the controller slot of this conversation.
+  const contended =
+    !showArbitration && !dormant && brokerUp && store.role === 'observer' && !!store.presence.controller;
+
   const loadCommands = useCallback(async (): Promise<void> => {
     try {
       setCommands(await getCommands(props.id));
@@ -92,6 +105,19 @@ export function NodePage(props: { id: string }) {
       .catch((err: unknown) => setActionError(asMessage(err)));
     void loadCommands();
   }, [props.id, loadCommands]);
+
+  // Studio holds its own conversation: with no manual arbitration UI, auto-grab
+  // the controller slot once the socket is open (design §4.3). Operator keeps
+  // the explicit request/release affordance, so this is skipped there.
+  const autoControlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (showArbitration || dormant) return;
+    if (!store.socketReady || !brokerUp) return;
+    if (store.role === 'controller') return;
+    if (autoControlRef.current === props.id) return; // already asked for this node
+    autoControlRef.current = props.id;
+    store.requestControl();
+  }, [showArbitration, dormant, store.socketReady, brokerUp, store.role, props.id, store]);
 
   // --- input actions ---
   const sendPrimary = (): void => {
@@ -140,7 +166,6 @@ export function NodePage(props: { id: string }) {
     }
   };
 
-  const tCanvas = useTerm('canvas');
   const tSteer = useTerm('steer');
 
   // The session screen's panel registry. Slots whose capability the active
@@ -151,31 +176,55 @@ export function NodePage(props: { id: string }) {
     chrome: { cap: 'node.internals', render: () => <ChromePanel store={store} detail={detail} /> },
     stream: { render: () => <MessageList messages={store.messages} streaming={streaming} /> },
     arbitration: { cap: 'node.arbitration', render: () => <Presence store={store} /> },
+    rail: { cap: 'subnodes.activity', render: () => <ActivityRail rootId={props.id} /> },
     composer: {
       render: () =>
         dormant ? (
           <DormantBar id={props.id} reviving={reviving} onRevive={doRevive} onClose={doClose} />
         ) : (
           <>
-            <DriveToolbar store={store} canDrive={canDrive} streaming={streaming} onClose={doClose} />
+            <Can cap="node.internals">
+              <DriveToolbar store={store} canDrive={canDrive} streaming={streaming} onClose={doClose} />
+            </Can>
+            {/* Consumer audiences get a soft working banner + Stop instead of the
+                raw drive toolbar's Abort. */}
+            {!showInternals && streaming && (
+              <div className="flex shrink-0 items-center gap-2 border-t border-border px-4 py-2 text-sm text-success">
+                <span className="size-1.5 animate-pulse rounded-full bg-success" />
+                Agent is working…
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="ml-auto"
+                  disabled={!canDrive}
+                  onClick={() => store.abort()}
+                >
+                  Stop
+                </Button>
+              </div>
+            )}
             <div className="relative flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3">
-              <CommandPalette
-                commands={commands}
-                query={input}
-                visible={input.startsWith('/')}
-                onSelect={selectCommand}
-              />
+              {showCommands && (
+                <CommandPalette
+                  commands={commands}
+                  query={input}
+                  visible={input.startsWith('/')}
+                  onSelect={selectCommand}
+                />
+              )}
               <Textarea
-                className="resize-none font-mono text-sm"
+                className={cn('resize-none text-sm', showInternals && 'font-mono')}
                 value={input}
                 onChange={(e) => setInput(e.currentTarget.value)}
                 onKeyDown={onInputKeyDown}
                 disabled={!canDrive}
-                placeholder={inputPlaceholder(isController, brokerUp)}
+                placeholder={inputPlaceholder(showInternals, showCommands, isController, brokerUp)}
                 rows={3}
               />
               <div className="flex items-center justify-end gap-2">
-                <InboxMessageButton id={props.id} />
+                <Can cap="node.internals">
+                  <InboxMessageButton id={props.id} />
+                </Can>
                 <Button
                   variant="default"
                   onClick={sendPrimary}
@@ -193,8 +242,8 @@ export function NodePage(props: { id: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
-        <Button variant="link" onClick={() => navigate('/')}>
-          ← {tCanvas}
+        <Button variant="link" onClick={() => navigate(home.path)}>
+          ← {home.label}
         </Button>
         <div className={cn('flex min-w-0 flex-1 flex-col gap-1', dormant && 'opacity-70')}>
           <Slot reg={slots} name="header" />
@@ -204,14 +253,21 @@ export function NodePage(props: { id: string }) {
       </header>
 
       <BrokerBanner state={store.brokerStatus} dormant={dormant} />
-      {store.error && (
+      {contended && (
+        <div className="border-b border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+          Someone else is steering this conversation.
+        </div>
+      )}
+      {/* Raw WS error codes are diagnostic — shown only to the internals
+          audience; consumers get the calm broker/contention banners instead. */}
+      {store.error && showInternals && (
         <div className="border-b border-destructive/30 bg-destructive/15 px-4 py-2 text-sm text-destructive">
           {store.error.code}: {store.error.message}
         </div>
       )}
       {actionError && (
         <div className="border-b border-destructive/30 bg-destructive/15 px-4 py-2 text-sm text-destructive">
-          {actionError}
+          {showInternals ? actionError : 'Something went wrong — please try again.'}
         </div>
       )}
 
@@ -228,10 +284,18 @@ export function NodePage(props: { id: string }) {
   );
 }
 
-function inputPlaceholder(controller: boolean, brokerUp: boolean): string {
+function inputPlaceholder(
+  showInternals: boolean,
+  showCommands: boolean,
+  controller: boolean,
+  brokerUp: boolean,
+): string {
+  if (!showInternals) {
+    return brokerUp ? 'Message your agent' : 'Reconnecting to your agent…';
+  }
   if (!controller) return 'observer — request control to drive this session';
   if (!brokerUp) return 'broker is down — input is frozen';
-  return 'Type a prompt, or / for commands…';
+  return showCommands ? 'Type a prompt, or / for commands…' : 'Type a prompt…';
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +303,17 @@ function inputPlaceholder(controller: boolean, brokerUp: boolean): string {
 // ---------------------------------------------------------------------------
 
 function BrokerBanner({ state, dormant }: { state: string; dormant: boolean }) {
+  // Consumer audiences (no diagnostics) see one calm, de-jargoned line for both
+  // the down and reconnecting states; the broker vocabulary never leaks.
+  const friendly = !useCapability('diagnostics');
   if (dormant || (state !== 'down' && state !== 'reconnecting')) return null;
+  if (friendly) {
+    return (
+      <div className="broker-banner border border-warning/30 bg-warning/15 px-4 py-2 text-sm">
+        Reconnecting to your agent…
+      </div>
+    );
+  }
   return (
     <div
       className={[
@@ -371,17 +445,19 @@ function DormantBar({
   onClose: () => void;
 }) {
   const grants = useGrants();
+  const showInternals = useCapability('node.internals');
   const tNode = useTerm('node');
   const tRevive = useTerm('revive');
   const tClose = useTerm('close');
 
+  // Resuming ("Continue") is the core path for every audience — no capability.
+  // Only the raw lifecycle controls (fresh-vs-resume choice, close) are gated.
   const actions: { key: string; cap?: Capability; node: ReactNode }[] = [
     {
       key: 'revive',
-      cap: 'node.lifecycle.raw',
       node: (
         <Button variant="default" disabled={reviving} onClick={onRevive}>
-          {reviving ? 'Reviving…' : tRevive}
+          {reviving ? `${tRevive}…` : tRevive}
         </Button>
       ),
     },
@@ -399,9 +475,13 @@ function DormantBar({
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-4 py-3">
       <span className="text-muted-foreground text-sm">
-        This {tNode} is dormant (read-only). {tRevive} to drive it live.
+        {showInternals
+          ? `This ${tNode} is dormant (read-only). ${tRevive} to drive it live.`
+          : `This ${tNode} is finished. ${tRevive} to keep going.`}
       </span>
-      <InboxMessageButton id={id} />
+      <Can cap="node.internals">
+        <InboxMessageButton id={id} />
+      </Can>
       {actionsFor(actions, grants).map((a) => (
         <Fragment key={a.key}>{a.node}</Fragment>
       ))}

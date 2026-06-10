@@ -16,6 +16,10 @@ import type { Capability, Profile } from './types.js';
 
 export type ProfileId = 'operator' | 'studio';
 
+// NOTE: `subnodes.activity` is intentionally absent. It is the Studio-only
+// inverse of `subnodes.visible` — Operator sees the child graph on the canvas,
+// so it never renders the summarized ActivityRail. A feature gates on the
+// capability once; the capability lands on whichever profiles want it.
 const ALL_CAPABILITIES: Capability[] = [
   'canvas.view',
   'canvas.search',
@@ -61,7 +65,10 @@ const operator: Profile = {
 const studio: Profile = {
   id: 'studio',
   label: 'Studio',
-  grants: new Set<Capability>(),
+  // Studio withholds every admin capability EXCEPT the one consumer-facing
+  // affordance it needs: a plain-language summary of the conversation's
+  // sub-DAG (the ActivityRail) in place of the raw child graph.
+  grants: new Set<Capability>(['subnodes.activity']),
   terms: {
     node: 'conversation',
     nodes: 'conversations',
@@ -76,10 +83,11 @@ const studio: Profile = {
     compact: '',
     close: '',
   },
+  // Phase 2 ships Conversations + Settings only. Inbox (Phase 3) and Views
+  // (Phase 4) are added back to this manifest when those screens land — no
+  // dead nav links or stub pages in the meantime (design §8).
   nav: [
     { id: 'conversations', label: 'Conversations', path: '/' },
-    { id: 'inbox', label: 'Inbox', path: '/inbox' },
-    { id: 'views', label: 'Views', path: '/views' },
     { id: 'settings', label: 'Settings', path: '/settings' },
   ],
   density: 'comfortable',

@@ -18,6 +18,7 @@ export type Capability =
   | 'node.spawn.raw' // full spawn params (kind/mode/cwd/model/parent)
   | 'node.lifecycle.raw' // revive resume/fresh, close, raw lifecycle labels
   | 'subnodes.visible' // show the child graph vs. summarize as activity
+  | 'subnodes.activity' // summarize the child sub-DAG as plain-language activity (the Studio ActivityRail)
   | 'commands.palette' // the slash-command palette
   | 'session.trace' // raw engine-event / tool-arg inspector
   | 'diagnostics' // presence counts, broker banners, timings

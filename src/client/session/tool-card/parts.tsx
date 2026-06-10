@@ -18,6 +18,8 @@ import type {
   ImageContent,
 } from '../../../shared/protocol.js';
 import { ImageBlock } from '../image-block.js';
+import { useCapability } from '../../profile/provider.js';
+import { friendlyToolTitle } from './friendly-titles.js';
 
 /** Markdown-body styling (the `.cw-md` equivalent; mirrors text-block). */
 export const MD_CLASSES =
@@ -96,6 +98,11 @@ export interface ShellProps {
 /** Common card chrome: header (tool name, subtitle, status pill) + body slot. */
 export function ToolCardShell({ call, subtitle, inProgress, isError, children }: ShellProps) {
   const sub = subtitle ?? callSubtitle(call);
+  // Audience copy: the internals audience (Operator) reads the raw pi tool name
+  // in mono; a consumer audience (Studio) reads a plain-language title in sans.
+  // Capability-driven — never branched on profile name.
+  const raw = useCapability('node.internals');
+  const title = raw ? call.name : friendlyToolTitle(call);
   return (
     <div
       className={cn(
@@ -105,9 +112,9 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
     >
       {/* Header — .cw-card-head equivalent */}
       <div className="flex items-center gap-2 px-[10px] py-[6px] bg-muted/50 text-[12.5px]">
-        <span className="font-semibold font-mono">{call.name}</span>
+        <span className={cn('font-semibold', raw && 'font-mono')}>{title}</span>
         {sub && (
-          <span className="opacity-60 font-mono text-[11.5px] overflow-hidden text-ellipsis whitespace-nowrap">
+          <span className={cn('opacity-60 text-[11.5px] overflow-hidden text-ellipsis whitespace-nowrap', raw && 'font-mono')}>
             {sub}
           </span>
         )}
