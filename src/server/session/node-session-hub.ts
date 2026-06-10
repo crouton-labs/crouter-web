@@ -141,6 +141,11 @@ export class NodeSessionHub {
    *  flag makes the trailing `close` a no-op so a dormant node never flaps a
    *  `down`/`reconnecting` storm (§7 — never fabricate a live session). */
   private wentDormant = false;
+  /** True while a server-side revive is bringing a dormant hub live (AC-18).
+   *  Drives the boot-poll for the new broker's `view.sock` and makes the first
+   *  `welcome` emit `broker_status:'revived'` even though we never connected
+   *  before — the open tab transitions dormant→live with no page reload. */
+  private reviving = false;
 
   constructor(
     readonly nodeId: string,
@@ -206,6 +211,57 @@ export class NodeSessionHub {
   // Session start — live connect vs dormant static (D14)
   // -------------------------------------------------------------------------
 
+  /** Bring a dormant (static) hub live after a server-side revive: poll for the
+   *  freshly-booted broker's `view.sock`, connect upstream over the EXISTING
+   *  tabs, and on `welcome` emit `broker_status:'revived'` + a fresh live
+   *  snapshot — one render path, no page reload (AC-18, D14). No-op when the hub
+   *  is already live or has no open tab. */
+  revive(): void {
+    if (this.disposed || this.tabs.size === 0) return;
+    if (this.everConnected && this.upstream) return; // already live
+    this.reviving = true;
+    this.wentDormant = false;
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.tryReviveConnect();
+  }
+
+  /** Connect upstream once the revived broker's `view.sock` exists; otherwise
+   *  retry with bounded backoff while pi boots (the window between `reviveNode`
+   *  returning and the broker accepting connections). */
+  private tryReviveConnect(): void {
+    if (this.disposed || !this.reviving) return;
+    if (this.deps.viewSockExists(this.nodeId)) {
+      this.connectUpstream();
+      return;
+    }
+    this.scheduleReviveRetry();
+  }
+
+  private scheduleReviveRetry(): void {
+    if (this.disposed || this.reconnectTimer || !this.reviving) return;
+    if (this.reconnectAttempts >= this.backoff.maxAttempts) {
+      // The broker never came online within the boot window — stop polling and
+      // surface the failure; the tab stays on its read-only dormant snapshot.
+      this.reviving = false;
+      this.broadcast({
+        type: 'error',
+        code: 'broker_unavailable',
+        message: `Revive of ${this.nodeId} did not come online.`,
+      });
+      return;
+    }
+    const delay = Math.min(this.backoff.maxMs, this.backoff.baseMs * 2 ** this.reconnectAttempts);
+    this.reconnectAttempts += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.tryReviveConnect();
+    }, delay);
+  }
+
   private async start(): Promise<void> {
     const node = this.deps.resolveNode(this.nodeId);
     const live =
@@ -237,10 +293,15 @@ export class NodeSessionHub {
     if (this.disposed) return;
     // Socket missing for a node we thought was live → treat as dormant (§7).
     if (err instanceof BrokerUnavailableError && !this.everConnected) {
+      this.upstream = null;
+      if (this.reviving) {
+        // The revived broker hasn't opened its socket yet — keep polling.
+        this.scheduleReviveRetry();
+        return;
+      }
       // Fell back to dormant. The stale socket's trailing `close` must NOT
       // drive a reconnect storm over a node that is simply dormant.
       this.wentDormant = true;
-      this.upstream = null;
       void this.loadStatic();
     }
     // Other errors converge on the `close` event, which drives reconnect.
@@ -299,8 +360,11 @@ export class NodeSessionHub {
   }
 
   private onWelcome(frame: WelcomeFrame): void {
-    const reconnected = this.everConnected;
+    // A reconnect (live broker dropped then returned) OR a dormant→live revive
+    // both surface to the tab as `broker_status:'revived'` (AC-18).
+    const reconnected = this.everConnected || this.reviving;
     this.everConnected = true;
+    this.reviving = false;
     this.source = 'broker';
     this.reconnectAttempts = 0;
 
@@ -479,6 +543,12 @@ export class NodeSessionHub {
       return;
     }
     this.upstream = null;
+    if (this.reviving && !this.everConnected) {
+      // The socket closed before the revived broker handed us a welcome — keep
+      // polling for it rather than flapping `down`/reconnect.
+      this.scheduleReviveRetry();
+      return;
+    }
     this.broadcast({ type: 'broker_status', state: 'down' });
     if (this.tabs.size > 0) this.scheduleReconnect();
   }

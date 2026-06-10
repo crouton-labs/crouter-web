@@ -91,7 +91,13 @@ export async function serve(opts: ServeOpts): Promise<void> {
   registerActionRoutes(router, {
     spawnChild,
     appendInbox,
-    reviveNode,
+    // Boot the broker, then kick any OPEN hub on this node to reconnect upstream
+    // so its read-only tab transitions live over the existing socket (AC-18).
+    reviveNode: (id, opts) => {
+      const result = reviveNode(id, opts);
+      hubRegistry.reviveHub(id);
+      return result;
+    },
     closeNode,
     getNode,
     defaultCwd: process.cwd(),

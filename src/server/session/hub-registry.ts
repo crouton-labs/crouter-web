@@ -69,6 +69,14 @@ export class HubRegistry {
     return hub.getCommands();
   }
 
+  /** Bring a dormant hub for `nodeId` live after a server-side revive: the open
+   *  tab transitions read-only→live over its EXISTING socket, no page reload
+   *  (AC-18). No-op when no tab is open on the node (the next entry connects
+   *  live on its own). */
+  reviveHub(nodeId: string): void {
+    this.hubs.get(nodeId)?.revive();
+  }
+
   /** True iff a hub is currently open for `nodeId`. */
   has(nodeId: string): boolean {
     return this.hubs.has(nodeId);

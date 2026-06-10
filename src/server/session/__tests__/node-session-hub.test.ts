@@ -27,6 +27,42 @@ class StaleSocket extends EventEmitter {
   close(): void {}
 }
 
+/** A live broker socket that completes the handshake and replies to `hello`
+ *  with a `welcome` carrying the given history snapshot. */
+class LiveSocket extends EventEmitter {
+  constructor(private readonly snapshotMessages: unknown[]) {
+    super();
+  }
+  connect(): void {
+    setImmediate(() => this.emit('connect'));
+  }
+  send(frame: { type: string }): void {
+    if (frame.type === 'hello') {
+      setImmediate(() =>
+        this.emit('frame', {
+          type: 'welcome',
+          controller_id: null,
+          snapshot: {
+            messages: this.snapshotMessages,
+            stats: {
+              sessionId: 'node-1',
+              userMessages: 1,
+              assistantMessages: 1,
+              toolCalls: 0,
+              toolResults: 0,
+              totalMessages: 2,
+              tokens: { input: 3, output: 4, cacheRead: 0, cacheWrite: 0, total: 7 },
+              cost: 0,
+            },
+            state: {},
+          },
+        }),
+      );
+    }
+  }
+  close(): void {}
+}
+
 function tick(): Promise<void> {
   return new Promise((r) => setImmediate(r));
 }
@@ -68,6 +104,60 @@ test('stale view.sock serves the static snapshot once, with no reconnect storm',
   );
   // One connect attempt only — no reconnect loop spun up fresh sockets.
   assert.equal(socketsMade, 1);
+
+  hub.dispose();
+});
+
+test('revive() transitions a dormant tab live over the same socket (no reload)', async () => {
+  let sockExists = false; // dormant at entry; the revive boots the broker
+  const liveHistory = [
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: [{ type: 'text', text: 'live again' }] },
+  ];
+  const deps: HubDeps = {
+    createSocket: () => new LiveSocket(liveHistory) as unknown as ViewSocketClient,
+    resolveNode: () => ({ status: 'active', hostKind: 'broker' }),
+    viewSockExists: () => sockExists,
+    resolveSessionFile: () => '/fake/session.jsonl',
+    normalizeDormantSession: async () => ({
+      history: [{ role: 'user', content: 'hi' } as never],
+      model: 'gpt-x',
+      thinkingLevel: 'off',
+    }),
+    newClientId: () => 'srv-1',
+    backoff: { baseMs: 1, maxMs: 2, maxAttempts: 8 },
+  };
+
+  const hub = new NodeSessionHub('node-1', deps);
+  const msgs: WsServerMsg[] = [];
+  hub.addTab((m) => msgs.push(m));
+
+  // Dormant render first: one static snapshot, no broker_status flap.
+  await tick();
+  await new Promise((r) => setTimeout(r, 10));
+  const firstSnap = msgs.find((m) => m.type === 'snapshot') as { source?: string } | undefined;
+  assert.equal(firstSnap?.source, 'static');
+
+  // The broker comes online, then the server kicks the hub.
+  sockExists = true;
+  hub.revive();
+  await new Promise((r) => setTimeout(r, 20));
+
+  // The same open tab received a `revived` status and a fresh LIVE snapshot,
+  // with no second static snapshot in between (one render path, no reload).
+  const statuses = msgs.filter((m) => m.type === 'broker_status') as Array<{ state: string }>;
+  assert.ok(
+    statuses.some((s) => s.state === 'revived'),
+    `expected a 'revived' status; got ${JSON.stringify(statuses)}`,
+  );
+  const snaps = msgs.filter((m) => m.type === 'snapshot') as Array<{ source?: string }>;
+  const liveSnap = snaps.find((s) => s.source === 'broker');
+  assert.ok(liveSnap, 'expected a live broker snapshot after revive');
+  assert.equal(
+    (liveSnap as { history: unknown[] }).history.length,
+    2,
+    'live snapshot replaces dormant history from the broker (no dup/loss)',
+  );
 
   hub.dispose();
 });
