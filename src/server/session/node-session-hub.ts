@@ -36,7 +36,9 @@ import { BrokerUnavailableError } from '../crouter-lib.js';
 import type {
   AgentMessage,
   AgentSessionEvent,
+  AssistantMessage,
   BrokerStatus,
+  ChromeMsg,
   Command,
   SessionState,
   SnapshotMsg,
@@ -120,6 +122,9 @@ export class NodeSessionHub {
   /** Folded message history (the reducer store). */
   private messages: AgentMessage[] = [];
   private stats: SessionStats | null = null;
+  /** Model context window, cached from the welcome snapshot so per-turn chrome
+   *  can recompute context-usage percent without a re-fetch (AC-16). */
+  private contextWindow: number | null = null;
   private state: SessionState | null = null;
   private pendingDialog: RpcExtensionUIRequest | null = null;
   private source: Source = 'broker';
@@ -292,6 +297,7 @@ export class NodeSessionHub {
 
     this.messages = initMessages(frame.snapshot.messages);
     this.stats = frame.snapshot.stats;
+    this.contextWindow = frame.snapshot.stats.contextUsage?.contextWindow ?? this.contextWindow;
     this.state = welcomeToSnapshot(frame, { role: 'observer', controller: null, viewers: 0 }).state;
     this.pendingDialog = frame.pending_dialog ?? null;
     this.snapshotReady = true;
@@ -362,9 +368,83 @@ export class NodeSessionHub {
       else if (event.type === 'session_info_changed') this.state = { ...this.state, sessionName: event.name ?? null };
       else if (event.type === 'thinking_level_changed') this.state = { ...this.state, thinkingLevel: event.level };
     }
-    // …and relay verbatim to every tab.
+    // …relay verbatim to every tab…
     const msg = eventToMsg(event);
     for (const tab of this.tabs.values()) tab.send(msg);
+    // …and, when a message finalizes, refresh chrome from pi's authoritative
+    // usage (token burn, context %, cost, counts) and push a coalesced chrome
+    // frame so the bar updates live without a reload (AC-16, spec F.1/F.3).
+    if (event.type === 'message_end') {
+      this.accrueChrome(event.message);
+      this.broadcast(this.buildChromeMsg());
+    }
+  }
+
+  /** Fold one finalized message's usage into the cached `SessionStats`, so both
+   *  the live chrome frame and a late tab's snapshot reflect the current turn.
+   *  Mirrors pi's own cumulative accounting (per-call token sums; context size
+   *  is the latest call's `totalTokens`). */
+  private accrueChrome(message: AgentMessage): void {
+    const s = this.stats;
+    if (!s) return;
+    if (message.role === 'user') {
+      this.stats = { ...s, userMessages: s.userMessages + 1, totalMessages: s.totalMessages + 1 };
+      return;
+    }
+    if (message.role !== 'assistant') return;
+    const am = message as AssistantMessage;
+    const toolCalls = am.content.reduce((n, b) => (b.type === 'toolCall' ? n + 1 : n), 0);
+    const next: SessionStats = {
+      ...s,
+      assistantMessages: s.assistantMessages + 1,
+      totalMessages: s.totalMessages + 1,
+      toolCalls: s.toolCalls + toolCalls,
+      tokens: { ...s.tokens },
+    };
+    const usage = am.usage;
+    if (usage) {
+      const ctxTokens = usage.totalTokens ?? s.contextUsage?.tokens ?? 0;
+      const win = this.contextWindow ?? s.contextUsage?.contextWindow ?? 0;
+      next.tokens = {
+        input: s.tokens.input + (usage.input ?? 0),
+        output: s.tokens.output + (usage.output ?? 0),
+        cacheRead: s.tokens.cacheRead + (usage.cacheRead ?? 0),
+        cacheWrite: s.tokens.cacheWrite + (usage.cacheWrite ?? 0),
+        total: s.tokens.total + ctxTokens,
+      };
+      next.cost = s.cost + (usage.cost?.total ?? 0);
+      if (win > 0) {
+        next.contextUsage = { tokens: ctxTokens, contextWindow: win, percent: (ctxTokens / win) * 100 };
+      }
+    }
+    this.stats = next;
+  }
+
+  /** Build a coalesced chrome update from the cached stats + engine state.
+   *  Field semantics mirror the client's snapshot-seed mapping (D12), so a
+   *  `chrome` frame refines exactly what the snapshot seeded. `branch` is
+   *  omitted — it is owned by the REST/git path, not the session socket. */
+  private buildChromeMsg(): ChromeMsg {
+    const s = this.stats;
+    const msg: ChromeMsg = { type: 'chrome', model: this.state?.model ?? null };
+    if (s) {
+      msg.tokens = { input: s.tokens.input, output: s.tokens.output, cache: s.tokens.cacheRead };
+      msg.context = s.contextUsage
+        ? {
+            tokens: s.contextUsage.tokens ?? 0,
+            window: s.contextUsage.contextWindow,
+            percent: s.contextUsage.percent ?? 0,
+          }
+        : null;
+      msg.tool_calls = s.toolCalls;
+      msg.stats = {
+        turns: s.assistantMessages,
+        user_messages: s.userMessages,
+        assistant_messages: s.assistantMessages,
+        cost: s.cost,
+      };
+    }
+    return msg;
   }
 
   // -------------------------------------------------------------------------
