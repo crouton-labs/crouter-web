@@ -54,8 +54,8 @@ import {
   controlChangedToMsg,
   eventToMsg,
   isControllerOnly,
+  mapState,
   parseCommandsAck,
-  welcomeToSnapshot,
   translateUiRequest,
 } from './frame-translate.js';
 
@@ -136,6 +136,11 @@ export class NodeSessionHub {
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private disposed = false;
+  /** Set once a connect attempt fell back to dormant (stale `view.sock`). A
+   *  stale socket emits `error(BrokerUnavailableError)` THEN `close`; this
+   *  flag makes the trailing `close` a no-op so a dormant node never flaps a
+   *  `down`/`reconnecting` storm (§7 — never fabricate a live session). */
+  private wentDormant = false;
 
   constructor(
     readonly nodeId: string,
@@ -215,6 +220,7 @@ export class NodeSessionHub {
 
   private connectUpstream(): void {
     if (this.disposed) return;
+    this.wentDormant = false;
     const sock = this.deps.createSocket(this.nodeId);
     this.upstream = sock;
     sock.on('connect', () => {
@@ -231,6 +237,9 @@ export class NodeSessionHub {
     if (this.disposed) return;
     // Socket missing for a node we thought was live → treat as dormant (§7).
     if (err instanceof BrokerUnavailableError && !this.everConnected) {
+      // Fell back to dormant. The stale socket's trailing `close` must NOT
+      // drive a reconnect storm over a node that is simply dormant.
+      this.wentDormant = true;
       this.upstream = null;
       void this.loadStatic();
     }
@@ -298,7 +307,7 @@ export class NodeSessionHub {
     this.messages = initMessages(frame.snapshot.messages);
     this.stats = frame.snapshot.stats;
     this.contextWindow = frame.snapshot.stats.contextUsage?.contextWindow ?? this.contextWindow;
-    this.state = welcomeToSnapshot(frame, { role: 'observer', controller: null, viewers: 0 }).state;
+    this.state = mapState(frame.snapshot.state);
     this.pendingDialog = frame.pending_dialog ?? null;
     this.snapshotReady = true;
 
@@ -313,7 +322,9 @@ export class NodeSessionHub {
   }
 
   private onControlChanged(frame: ControlChangedFrame): void {
-    this.arbiter.onBrokerControlChanged(frame.controller_id);
+    // `silent` — the broadcast below already notifies every tab of its role, so
+    // the arbiter must not also directly notify the controller tab (no dup).
+    this.arbiter.onBrokerControlChanged(frame.controller_id, { silent: true });
     // Broadcast the new controller identity to every tab (you_are per tab).
     for (const tab of this.tabs.values()) {
       tab.send(controlChangedToMsg(this.arbiter.controllerLabel(), this.arbiter.roleOf(tab.id)));
@@ -460,6 +471,13 @@ export class NodeSessionHub {
 
   private handleClose(): void {
     if (this.disposed) return;
+    if (this.wentDormant) {
+      // The connection fell back to dormant; this `close` always follows the
+      // BrokerUnavailableError and is expected. Stay dormant — no `down`, no
+      // reconnect (loadStatic already served the static snapshot).
+      this.upstream = null;
+      return;
+    }
     this.upstream = null;
     this.broadcast({ type: 'broker_status', state: 'down' });
     if (this.tabs.size > 0) this.scheduleReconnect();
@@ -515,7 +533,11 @@ export class NodeSessionHub {
    *  409 `no_command_source`). */
   getCommands(): Promise<Command[] | null> {
     if (this.commands !== null) return Promise.resolve(this.commands);
-    if (this.source === 'static' || (this.upstream === null && this.reconnectTimer === null)) {
+    // Only a dormant (static) or torn-down hub has no live command source. A
+    // hub that is mid-reconnect keeps `source==='broker'` and waits (the 3s
+    // timeout below bounds the wait), rather than reporting a coarse null in
+    // the window between a dropped upstream and the next reconnect attempt.
+    if (this.source === 'static' || this.disposed) {
       return Promise.resolve(null);
     }
     return new Promise((resolve) => {
@@ -594,17 +616,22 @@ function staticState(
 function staticStats(nodeId: string, history: AgentMessage[]): SessionStats {
   let userMessages = 0;
   let assistantMessages = 0;
+  let toolCalls = 0;
+  let toolResults = 0;
   for (const m of history) {
     if (m.role === 'user') userMessages += 1;
-    else if (m.role === 'assistant') assistantMessages += 1;
+    else if (m.role === 'assistant') {
+      assistantMessages += 1;
+      for (const b of (m as AssistantMessage).content) if (b.type === 'toolCall') toolCalls += 1;
+    } else if (m.role === 'toolResult') toolResults += 1;
   }
   return {
     sessionFile: undefined,
     sessionId: nodeId,
     userMessages,
     assistantMessages,
-    toolCalls: 0,
-    toolResults: 0,
+    toolCalls,
+    toolResults,
     totalMessages: history.length,
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     cost: 0,

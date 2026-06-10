@@ -41,10 +41,37 @@ function parseClientMsg(raw: string): WsClientMsg | null {
     return null;
   }
   if (typeof value !== 'object' || value === null) return null;
-  const type = (value as { type?: unknown }).type;
+  const v = value as Record<string, unknown>;
+  const type = v.type;
   if (typeof type !== 'string') return null;
   if (!CLIENT_TYPES.has(type)) return null;
+  if (!hasValidPayload(type, v)) return null;
   return value as WsClientMsg;
+}
+
+/** Per-type payload check so structurally-invalid driving frames (e.g.
+ *  `{type:'prompt'}` with no `text`) are dropped here, not forwarded to the
+ *  broker only to be rejected (spec §6.2 defensive gate). */
+function hasValidPayload(type: string, v: Record<string, unknown>): boolean {
+  switch (type) {
+    case 'prompt':
+    case 'steer':
+      return typeof v.text === 'string';
+    case 'set_model':
+      return typeof v.model === 'string';
+    case 'set_thinking_level':
+      return typeof v.level === 'string';
+    case 'dialog_response':
+      return typeof v.request_id === 'string' && typeof v.response === 'object' && v.response !== null;
+    case 'abort':
+    case 'cycle_model':
+    case 'compact':
+    case 'request_control':
+    case 'release_control':
+      return true;
+    default:
+      return false;
+  }
 }
 
 const CLIENT_TYPES: ReadonlySet<string> = new Set<WsClientMsg['type']>([

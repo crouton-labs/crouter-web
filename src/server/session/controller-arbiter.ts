@@ -137,15 +137,20 @@ export class ControllerArbiter {
 
   /** Reconcile against the broker's authoritative `controller_id` (from a
    *  `WelcomeFrame` at attach, or a relayed `ControlChangedFrame`). This is the
-   *  single point that flips `brokerSlotHeld`/`externalHolds`. */
-  onBrokerControlChanged(controllerId: string | null): void {
+   *  single point that flips `brokerSlotHeld`/`externalHolds`.
+   *  Pass `silent: true` when the caller will itself broadcast the resulting
+   *  role to every tab (the hub's `onControlChanged` does) — it suppresses the
+   *  arbiter's own per-tab notify so the controller tab does not receive a
+   *  duplicate `control_changed`. */
+  onBrokerControlChanged(controllerId: string | null, opts?: { silent?: boolean }): void {
     this.controllerId = controllerId;
+    const silent = opts?.silent === true;
 
     if (controllerId === this.deps.clientId) {
       // We now hold the broker slot — confirm the pending web-controller tab.
       this.brokerSlotHeld = true;
       this.externalHolds = false;
-      if (this.webController !== null) {
+      if (this.webController !== null && !silent) {
         this.deps.notifyTab(this.webController, {
           type: 'control_changed',
           controller: controllerId,
@@ -156,6 +161,14 @@ export class ControllerArbiter {
       // Slot is free (we or an external client released it).
       this.brokerSlotHeld = false;
       this.externalHolds = false;
+      // A web tab may still hold the web slot even though the broker slot just
+      // went free — e.g. tab B requested control inside tab A's lazy-release
+      // window, so A's `release_control` echoes `null` here while B is the
+      // standing `webController`. Re-acquire upstream so the web-controller
+      // always actually holds a live broker slot (never a phantom one).
+      if (this.webController !== null) {
+        this.deps.sendUpstream({ type: 'request_control' });
+      }
     } else {
       // An external client grabbed the slot — demote any web-controller tab.
       this.brokerSlotHeld = false;
@@ -163,11 +176,13 @@ export class ControllerArbiter {
       if (this.webController !== null) {
         const demoted = this.webController;
         this.webController = null;
-        this.deps.notifyTab(demoted, {
-          type: 'control_changed',
-          controller: controllerId,
-          you_are: 'observer',
-        });
+        if (!silent) {
+          this.deps.notifyTab(demoted, {
+            type: 'control_changed',
+            controller: controllerId,
+            you_are: 'observer',
+          });
+        }
       }
     }
   }

@@ -130,6 +130,37 @@ test('release frees the broker slot upstream', () => {
   assert.deepEqual(h.upstream.at(-1), { type: 'request_control' });
 });
 
+test('release-then-request across two tabs re-acquires the slot (no phantom controller)', () => {
+  const h = harness();
+  // Tab A acquires and holds the broker slot.
+  h.arbiter.onBrokerControlChanged(null);
+  h.arbiter.requestControl('A');
+  h.arbiter.onBrokerControlChanged(SERVER_ID);
+  assert.equal(h.arbiter.roleOf('A'), 'controller');
+
+  // A releases (lazy: brokerSlotHeld stays true until the broker echoes null),
+  // and tab B requests control INSIDE that window — a pure tab handoff over the
+  // still-held slot.
+  h.arbiter.releaseControl('A');
+  h.arbiter.requestControl('B');
+  assert.equal(h.arbiter.roleOf('B'), 'controller');
+
+  h.upstream.length = 0;
+  h.notes.length = 0;
+
+  // The broker finally processes A's earlier release and echoes the freed slot.
+  // B still holds the web slot, so the arbiter MUST re-acquire upstream rather
+  // than leave a phantom web-controller with no broker slot.
+  h.arbiter.onBrokerControlChanged(null);
+  assert.deepEqual(h.upstream, [{ type: 'request_control' }]);
+  // Until the broker re-grants, B is not (yet) a real controller.
+  assert.equal(h.arbiter.roleOf('B'), 'observer');
+
+  // Broker grants — B is a real, slot-backed controller again.
+  h.arbiter.onBrokerControlChanged(SERVER_ID);
+  assert.equal(h.arbiter.roleOf('B'), 'controller');
+});
+
 test('handleTabClose on the controller frees the slot', () => {
   const h = harness();
   h.arbiter.onBrokerControlChanged(null);
