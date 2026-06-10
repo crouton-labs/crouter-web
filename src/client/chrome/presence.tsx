@@ -5,40 +5,45 @@
  * "Release control" button for the controller.
  */
 
-import { Show, type JSX } from 'solid-js';
-import type { SessionStore } from '../store/session-store.js';
+import type { ReactNode } from 'react';
+import { Button } from '@/components/ui/button.js';
+import type { Presence as PresenceData, WebRole } from '../../shared/protocol.js';
 
-export function Presence(props: { store: SessionStore }): JSX.Element {
-  const presence = () => props.store.presence();
-  const isController = () => props.store.role() === 'controller';
+/** React-compatible subset of the session store — plain values, not signal accessors. */
+interface PresenceStore {
+  presence: PresenceData;
+  role: WebRole;
+  requestControl: () => void;
+  releaseControl: () => void;
+}
+
+export function Presence(props: { store: PresenceStore }): ReactNode {
+  const presence = props.store.presence;
+  const isController = props.store.role === 'controller';
   // The server reports its own client id as `controller` when a web tab holds
   // it; when this tab is the controller we say "you", otherwise "another client".
   const controllerLabel = (): string => {
-    if (isController()) return 'you';
-    const c = presence().controller;
-    return c ? 'another client' : 'no one';
+    if (isController) return 'you';
+    return presence.controller ? 'another client' : 'no one';
   };
 
   return (
-    <div class="presence">
-      <span class="presence-viewers" title="connected viewers">
-        👁 {presence().viewers}
+    <div className="flex shrink-0 items-center gap-3 font-mono text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1" title="connected viewers">
+        👁 {presence.viewers}
       </span>
-      <span class="presence-controller">
-        control: <strong>{controllerLabel()}</strong>
+      <span className="inline-flex items-center gap-1">
+        control: <strong className="text-foreground">{controllerLabel()}</strong>
       </span>
-      <Show
-        when={isController()}
-        fallback={
-          <button class="btn-secondary" onClick={() => props.store.requestControl()}>
-            Request control
-          </button>
-        }
-      >
-        <button class="btn-secondary" onClick={() => props.store.releaseControl()}>
+      {isController ? (
+        <Button variant="secondary" size="sm" onClick={() => props.store.releaseControl()}>
           Release control
-        </button>
-      </Show>
+        </Button>
+      ) : (
+        <Button variant="secondary" size="sm" onClick={() => props.store.requestControl()}>
+          Request control
+        </Button>
+      )}
     </div>
   );
 }

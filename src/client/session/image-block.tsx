@@ -7,9 +7,7 @@
  * src; the base64 payload itself is inert in an `<img>`.
  */
 
-import type { JSX } from 'solid-js';
 import type { ImageContent } from '../../shared/protocol.js';
-import { ensureStyles } from './styles.js';
 
 const SAFE_IMAGE_MIME = new Set([
   'image/png',
@@ -26,12 +24,18 @@ export interface ImageBlockProps {
   image: ImageContent;
 }
 
-export function ImageBlock(props: ImageBlockProps): JSX.Element {
-  ensureStyles();
-  const mime = (): string => {
-    const m = (props.image.mimeType || '').toLowerCase();
-    return SAFE_IMAGE_MIME.has(m) ? m : 'image/png';
-  };
-  const src = (): string => `data:${mime()};base64,${props.image.data ?? ''}`;
-  return <img class="cw-img" src={src()} alt="image content" loading="lazy" decoding="async" />;
+export function ImageBlock({ image }: ImageBlockProps) {
+  const rawMime = (image.mimeType || '').toLowerCase();
+  const mime = SAFE_IMAGE_MIME.has(rawMime) ? rawMime : 'image/png';
+  const src = `data:${mime};base64,${image.data ?? ''}`;
+  return (
+    <img
+      // .cw-img equivalent: bounded display block, rounded, contained.
+      className="block max-w-[min(100%,520px)] max-h-[420px] rounded-md my-1.5 object-contain"
+      src={src}
+      alt="image content"
+      loading="lazy"
+      decoding="async"
+    />
+  );
 }

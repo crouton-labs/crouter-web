@@ -1,14 +1,14 @@
 /**
  * Tool-card renderer registry (design D10, spec C.6/AC-7).
  *
- * Keyed by pi `toolName`. Each entry is a Solid component that renders a
+ * Keyed by pi `toolName`. Each entry is a React component that renders a
  * STRUCTURED card for that tool — never a raw JSON dump. Unknown tools fall to
  * the generic card. Discrimination is on the `toolName` string only: pi exports
  * no `isBashToolResult`-style guards, so cards inspect `ToolResultMessage`
  * content/details directly.
  */
 
-import type { Component } from 'solid-js';
+import type { ComponentType } from 'react';
 import type { ToolCardProps } from './parts.js';
 
 import { BashCard } from './bash.js';
@@ -18,7 +18,7 @@ import { WriteCard } from './write.js';
 import { GrepCard } from './grep.js';
 import { GenericCard } from './generic.js';
 
-export type ToolCardComponent = Component<ToolCardProps>;
+export type ToolCardComponent = ComponentType<ToolCardProps>;
 
 /**
  * Canonical name → renderer. Aliases (the broker/tooling sometimes names the

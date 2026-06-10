@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* crouter-web is a dark-primary terminal-flavored console. The :root values are
+   the dark theme (default); `.light` flips to the light theme. The shadcn New
+   York / zinc token set, tuned: a near-black canvas, cyan-leaning primary, and
+   a monospace stack for code/tool/stream content. */
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.16 0.004 285);
+  --foreground: oklch(0.92 0.004 285);
+  --card: oklch(0.19 0.005 285);
+  --card-foreground: oklch(0.92 0.004 285);
+  --popover: oklch(0.19 0.005 285);
+  --popover-foreground: oklch(0.92 0.004 285);
+  --primary: oklch(0.7 0.13 215);
+  --primary-foreground: oklch(0.16 0.02 240);
+  --secondary: oklch(0.27 0.006 286);
+  --secondary-foreground: oklch(0.92 0.004 285);
+  --muted: oklch(0.24 0.006 286);
+  --muted-foreground: oklch(0.65 0.008 286);
+  --accent: oklch(0.27 0.006 286);
+  --accent-foreground: oklch(0.92 0.004 285);
+  --destructive: oklch(0.62 0.21 24);
+  --destructive-foreground: oklch(0.97 0.005 285);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.7 0.13 215);
+
+  /* lifecycle/status accents (B.4) — used by status badges/dots */
+  --status-active: oklch(0.72 0.16 145);
+  --status-idle: oklch(0.78 0.13 90);
+  --status-done: oklch(0.7 0.12 235);
+  --status-dead: oklch(0.6 0.02 286);
+  --status-canceled: oklch(0.6 0.02 286);
+  --status-blocked: oklch(0.72 0.19 35);
+
+  --success: oklch(0.72 0.16 145);
+  --warning: oklch(0.78 0.13 90);
+  --thinking: oklch(0.68 0.13 300);
+}
+
+.light {
+  --background: oklch(0.99 0.002 285);
+  --foreground: oklch(0.2 0.006 285);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.006 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.006 285);
+  --primary: oklch(0.52 0.12 220);
+  --primary-foreground: oklch(0.99 0.002 285);
+  --secondary: oklch(0.96 0.004 286);
+  --secondary-foreground: oklch(0.24 0.006 286);
+  --muted: oklch(0.96 0.004 286);
+  --muted-foreground: oklch(0.55 0.008 286);
+  --accent: oklch(0.96 0.004 286);
+  --accent-foreground: oklch(0.24 0.006 286);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.99 0.002 285);
+  --border: oklch(0.2 0.01 285 / 12%);
+  --input: oklch(0.2 0.01 285 / 16%);
+  --ring: oklch(0.52 0.12 220);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-status-active: var(--status-active);
+  --color-status-idle: var(--status-idle);
+  --color-status-done: var(--status-done);
+  --color-status-dead: var(--status-dead);
+  --color-status-canceled: var(--status-canceled);
+  --color-status-blocked: var(--status-blocked);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-thinking: var(--thinking);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

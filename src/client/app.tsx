@@ -1,9 +1,17 @@
-// The application shell. `AppRoutes` (from the SPA client) owns the router, the
-// global ReconnectingBanner, and the `/` ↔ `/nodes/:id` pages — App just mounts it.
+// The application shell: router provider + the global tooltip provider + the
+// reconnecting banner. AppRoutes owns the `/` ↔ `/nodes/:id` routes.
 
-import type { JSX } from "solid-js";
-import { AppRoutes } from "./app-routes.js";
+import { BrowserRouter } from "react-router-dom";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppRoutes, ReconnectingBanner } from "./app-routes.js";
 
-export function App(): JSX.Element {
-  return <AppRoutes />;
+export function App() {
+  return (
+    <BrowserRouter>
+      <TooltipProvider delayDuration={300}>
+        <ReconnectingBanner />
+        <AppRoutes />
+      </TooltipProvider>
+    </BrowserRouter>
+  );
 }

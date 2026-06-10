@@ -4,41 +4,53 @@
  * Two rendering modes, switched on `inProgress`:
  *   - WHILE STREAMING (the trailing text block of the active assistant message):
  *     render ESCAPED PLAIN TEXT, updated incrementally on every `text_delta`.
- *     No markdown pass — partial markup must never be interpreted, and a full
- *     re-parse per delta would be O(n\u00b2) on long messages (D9 rejected (b)).
+ *     No markdown pass — partial markup must never be interpreted.
  *   - WHEN ENDED: run the full markdown + highlight + sanitize pass once and set
- *     the sanitized HTML. `renderMarkdown` always returns DOMPurify-laundered
- *     HTML, so assigning it to innerHTML is safe (C.8).
+ *     the sanitized HTML via dangerouslySetInnerHTML. `renderMarkdown` always
+ *     returns DOMPurify-laundered HTML, so this is safe (C.8).
  */
 
-import { createMemo, Show, type JSX } from 'solid-js';
+import { useMemo } from 'react';
 import { renderMarkdown } from '../render/markdown.js';
 import { escapeText } from '../render/sanitize.js';
-import { ensureStyles } from './styles.js';
 
 export interface TextBlockProps {
   text: string;
   /** True while this is the still-growing trailing text block. */
-  inProgress: () => boolean;
+  inProgress: boolean;
 }
 
-export function TextBlock(props: TextBlockProps): JSX.Element {
-  ensureStyles();
-  // Only recomputed when the (ended) text actually changes; never runs the
-  // expensive markdown pass while streaming.
-  const html = createMemo<string>((prev) => {
-    if (props.inProgress()) return prev ?? '';
-    return renderMarkdown(props.text ?? '');
-  }, '');
+export function TextBlock({ text, inProgress }: TextBlockProps) {
+  // Only recomputed when the ended text changes; never runs the markdown pass
+  // while streaming.
+  const html = useMemo<string>(() => {
+    if (inProgress) return '';
+    return renderMarkdown(text ?? '');
+  }, [inProgress, text]);
+
+  if (inProgress) {
+    // escapeText output → dangerouslySetInnerHTML: entities render as literal
+    // text; no markup can be interpreted mid-stream.
+    return (
+      <div
+        className="whitespace-pre-wrap"
+        dangerouslySetInnerHTML={{ __html: escapeText(text ?? '') }}
+      />
+    );
+  }
 
   return (
-    <Show
-      when={props.inProgress()}
-      fallback={<div class="cw-md" innerHTML={html()} />}
-    >
-      {/* escapeText output assigned as innerHTML — entities render as literal
-          text; no markup can be interpreted mid-stream. */}
-      <div class="cw-stream-text" innerHTML={escapeText(props.text ?? '')} />
-    </Show>
+    <div
+      // .cw-md equivalent: prose spacing, mono code blocks on bg-muted,
+      // links in primary, inline code highlighted.
+      className={[
+        '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-muted',
+        '[&_code]:font-mono [&_code]:text-[12.5px]',
+        '[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-[5px] [&_:not(pre)>code]:py-[1px] [&_:not(pre)>code]:rounded',
+        '[&_p]:my-[0.4em]',
+        '[&_a]:text-primary',
+      ].join(' ')}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }

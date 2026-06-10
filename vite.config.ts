@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
-import solid from "vite-plugin-solid";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { existsSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 
@@ -24,7 +25,11 @@ function resolveJsToTs() {
 
 export default defineConfig({
   root: "src/client",
-  plugins: [resolveJsToTs(), solid()],
+  plugins: [resolveJsToTs(), react(), tailwindcss()],
+  resolve: {
+    // shadcn/ui convention: "@/..." resolves to the client source root.
+    alias: { "@": pathResolve(import.meta.dirname, "src/client") },
+  },
   build: {
     outDir: "../../dist/client",
     emptyOutDir: true,

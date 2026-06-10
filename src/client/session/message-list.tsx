@@ -1,28 +1,22 @@
 /**
- * MessageList — the cross-worker contract (seam.md): Worker S consumes this,
- * Worker R owns it and ALL streaming-aware rendering beneath it.
+ * MessageList — virtualized message history (spec C.9 / AC-10).
  *
- * Virtualized (spec C.9 / AC-10) via `@tanstack/solid-virtual` so very long
- * histories don't freeze the browser — only the visible rows mount, measured
- * dynamically. Auto-scrolls to the bottom while new content arrives, but yields
- * to the user the moment they scroll up (sticky-bottom tracking).
- *
- * Pairing: a tool result whose tool-call exists in history is rendered inside
- * the assistant's tool card; it is filtered out of the row list here so it is
- * not also shown standalone. Orphan results (no matching call) stay visible.
+ * Renders only visible rows via `@tanstack/react-virtual`. Sticky-bottom
+ * auto-scroll yields to the user the moment they scroll up, and restores when
+ * they return to the bottom. Tool results whose call exists in history are
+ * filtered from the row list here (they render inside the assistant's card).
  */
 
-import { createMemo, createEffect, For, Show, type JSX } from 'solid-js';
-import { createVirtualizer } from '@tanstack/solid-virtual';
+import { useMemo, useEffect, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgentMessage, ToolResultMessage } from '../../shared/protocol.js';
 import { MessageView } from './message-view.js';
-import { ensureStyles } from './styles.js';
 
 export interface MessageListProps {
-  /** Reactive accessor for the folded message history (store-owned). */
-  messages: () => AgentMessage[];
-  /** Reactive accessor: is the engine currently producing a turn? */
-  streaming: () => boolean;
+  /** The folded message history. */
+  messages: AgentMessage[];
+  /** True while the engine is producing a turn. */
+  streaming: boolean;
 }
 
 interface Derived {
@@ -31,16 +25,13 @@ interface Derived {
   lastAssistant: AgentMessage | undefined;
 }
 
-export function MessageList(props: MessageListProps): JSX.Element {
-  ensureStyles();
-
-  // Single pass over history → row list, tool-result lookup, last-assistant id.
-  const derived = createMemo<Derived>(() => {
-    const msgs = props.messages();
+export function MessageList({ messages, streaming }: MessageListProps) {
+  // Single pass over history → row list, tool-result lookup, last-assistant ref.
+  const derived = useMemo<Derived>(() => {
     const resultMap = new Map<string, ToolResultMessage>();
     const callIds = new Set<string>();
     let lastAssistant: AgentMessage | undefined;
-    for (const m of msgs) {
+    for (const m of messages) {
       if (m.role === 'assistant') {
         lastAssistant = m;
         for (const b of m.content) if (b.type === 'toolCall') callIds.add(b.id);
@@ -48,68 +39,63 @@ export function MessageList(props: MessageListProps): JSX.Element {
         resultMap.set(m.toolCallId, m);
       }
     }
-    const visible = msgs.filter(
+    const visible = messages.filter(
       (m) => !(m.role === 'toolResult' && callIds.has(m.toolCallId)),
     );
     return { visible, resultMap, lastAssistant };
-  });
+  }, [messages]);
 
-  const rows = (): AgentMessage[] => derived().visible;
-  const resultFor = (id: string): ToolResultMessage | undefined => derived().resultMap.get(id);
+  const rows = derived.visible;
+  const resultFor = (id: string): ToolResultMessage | undefined => derived.resultMap.get(id);
 
-  let scrollEl: HTMLDivElement | undefined;
-  // Sticky-bottom: true while the user is parked at (or near) the end. Set false
-  // when they scroll up, restored when they return to the bottom.
-  let stuck = true;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Sticky-bottom: true while parked at (or near) the end; false when user scrolls up.
+  const stuckRef = useRef(true);
 
-  const virtualizer = createVirtualizer({
-    get count() {
-      return rows().length;
-    },
-    getScrollElement: () => scrollEl ?? null,
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
     estimateSize: () => 96,
     overscan: 10,
-    getItemKey: (index) => index,
   });
 
   const onScroll = (): void => {
-    if (!scrollEl) return;
-    const gap = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-    stuck = gap < 48;
-  };
-
-  const scrollToBottom = (): void => {
-    const n = rows().length;
-    if (n > 0) virtualizer.scrollToIndex(n - 1, { align: 'end' });
+    const el = scrollRef.current;
+    if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stuckRef.current = gap < 48;
   };
 
   // Re-pin to the bottom whenever content grows or the trailing message mutates
   // (streaming deltas replace the last message object), unless the user scrolled
-  // up. Reading rows() and the last row reference makes this fire on each delta.
-  createEffect(() => {
-    const r = rows();
-    void r.length;
-    void r[r.length - 1];
-    void props.streaming();
-    if (stuck) queueMicrotask(scrollToBottom);
-  });
+  // up. Tracking rows (reference changes on any mutation) + streaming covers
+  // both new-turn arrivals and in-flight delta updates.
+  useEffect(() => {
+    if (!stuckRef.current) return;
+    const n = rows.length;
+    if (n > 0) queueMicrotask(() => virtualizer.scrollToIndex(n - 1, { align: 'end' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, streaming]);
 
   return (
-    <div class="cw-msglist" ref={scrollEl} onScroll={onScroll}>
-      <div class="cw-msglist-inner" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-        <For each={virtualizer.getVirtualItems()}>
-          {(vi) => (
+    <div
+      ref={scrollRef}
+      className="flex flex-col h-full overflow-auto py-2"
+      onScroll={onScroll}
+    >
+      <div
+        className="relative w-full"
+        style={{ height: `${virtualizer.getTotalSize()}px` }}
+      >
+        {virtualizer.getVirtualItems().map((vi) => {
+          const message = rows[vi.index];
+          if (!message) return null;
+          return (
             <div
-              class="cw-row"
+              key={vi.key}
               data-index={vi.index}
-              ref={(el) => {
-                // virtual-core reads `data-index` off the node (its dynamic-
-                // measure ResizeObserver warns + discards a measurement when it
-                // is absent). Solid can run this ref before committing the JSX
-                // attribute, so set it imperatively first, then measure.
-                el.setAttribute('data-index', String(vi.index));
-                virtualizer.measureElement(el);
-              }}
+              ref={virtualizer.measureElement}
+              className="px-[14px] py-[6px] box-border"
               style={{
                 position: 'absolute',
                 top: 0,
@@ -118,19 +104,15 @@ export function MessageList(props: MessageListProps): JSX.Element {
                 transform: `translateY(${vi.start}px)`,
               }}
             >
-              <Show when={rows()[vi.index]}>
-                {(message) => (
-                  <MessageView
-                    message={message()}
-                    isLastAssistant={message() === derived().lastAssistant}
-                    streaming={props.streaming}
-                    resultFor={resultFor}
-                  />
-                )}
-              </Show>
+              <MessageView
+                message={message}
+                isLastAssistant={message === derived.lastAssistant}
+                streaming={streaming}
+                resultFor={resultFor}
+              />
             </div>
-          )}
-        </For>
+          );
+        })}
       </div>
     </div>
   );

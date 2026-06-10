@@ -8,11 +8,11 @@
  * filtered out upstream by MessageList.
  *
  * Streaming rule (design D9): the in-progress block is the TRAILING block of the
- * last assistant message while `streaming()` is true. Only that block renders
+ * last assistant message while `streaming` is true. Only that block renders
  * via the escaped-plain-text path; every finished block runs full markdown.
  */
 
-import { Index, Match, Show, Switch, type JSX } from 'solid-js';
+import type { ComponentType } from 'react';
 import type {
   AgentMessage,
   AssistantMessage,
@@ -20,147 +20,161 @@ import type {
   ToolResultMessage,
   TextContent,
   ImageContent,
+  ToolCall,
 } from '../../shared/protocol.js';
 import { TextBlock } from './text-block.js';
 import { ThinkingBlock } from './thinking-block.js';
 import { ImageBlock } from './image-block.js';
 import { getToolCard } from './tool-card/registry.js';
-import { ensureStyles } from './styles.js';
+import type { ToolCardProps } from './tool-card/parts.js';
 
 export interface MessageViewProps {
   message: AgentMessage;
   /** True iff this is the last assistant message in history. */
   isLastAssistant: boolean;
-  streaming: () => boolean;
-  /** Look up the tool result for a tool-call id (reactive). */
+  streaming: boolean;
+  /** Look up the tool result for a tool-call id. */
   resultFor: (toolCallId: string) => ToolResultMessage | undefined;
 }
 
-export function MessageView(props: MessageViewProps): JSX.Element {
-  ensureStyles();
-  const role = (): string => props.message.role;
+export function MessageView({ message, isLastAssistant, streaming, resultFor }: MessageViewProps) {
+  const role = message.role;
+  if (role === 'user') {
+    return (
+      <div className="text-sm leading-[1.55] break-words">
+        <UserView message={message as UserMessage} />
+      </div>
+    );
+  }
+  if (role === 'assistant') {
+    return (
+      <div className="text-sm leading-[1.55] break-words">
+        <AssistantView
+          message={message as AssistantMessage}
+          isLastAssistant={isLastAssistant}
+          streaming={streaming}
+          resultFor={resultFor}
+        />
+      </div>
+    );
+  }
+  if (role === 'toolResult') {
+    // Reaches here only for an ORPHAN tool result (no matching call).
+    return (
+      <div className="text-sm leading-[1.55] break-words">
+        <OrphanToolResult message={message as ToolResultMessage} />
+      </div>
+    );
+  }
+  // Unknown role: render nothing structural.
+  return null;
+}
+
+function UserView({ message }: { message: UserMessage }) {
+  const content = message.content;
   return (
-    <div class="cw-msg">
-      <Switch fallback={<GenericRoleView message={props.message} />}>
-        <Match when={role() === 'user'}>
-          <UserView message={props.message as UserMessage} />
-        </Match>
-        <Match when={role() === 'assistant'}>
-          <AssistantView
-            message={props.message as AssistantMessage}
-            isLastAssistant={props.isLastAssistant}
-            streaming={props.streaming}
-            resultFor={props.resultFor}
-          />
-        </Match>
-        <Match when={role() === 'toolResult'}>
-          {/* Reaches here only for an ORPHAN tool result (no matching call). */}
-          <OrphanToolResult message={props.message as ToolResultMessage} />
-        </Match>
-      </Switch>
+    <div className="bg-secondary rounded-lg px-3 py-2">
+      <div className="text-[11px] uppercase tracking-[0.06em] opacity-55 mb-1">user</div>
+      {typeof content === 'string' ? (
+        <div className="whitespace-pre-wrap">{content}</div>
+      ) : (
+        (content as (TextContent | ImageContent)[]).map((block, i) => {
+          if (block.type === 'text') {
+            return <div key={i} className="whitespace-pre-wrap">{(block as TextContent).text}</div>;
+          }
+          if (block.type === 'image') {
+            return <ImageBlock key={i} image={block as ImageContent} />;
+          }
+          return null;
+        })
+      )}
     </div>
   );
 }
 
-function UserView(props: { message: UserMessage }): JSX.Element {
-  const content = (): UserMessage['content'] => props.message.content;
-  return (
-    <div class="cw-msg-user">
-      <div class="cw-role">user</div>
-      <Show
-        when={typeof content() !== 'string'}
-        fallback={<div class="cw-stream-text">{content() as string}</div>}
-      >
-        <Index each={content() as (TextContent | ImageContent)[]}>
-          {(block) => (
-            <Switch>
-              <Match when={block().type === 'text'}>
-                <div class="cw-stream-text">{(block() as TextContent).text}</div>
-              </Match>
-              <Match when={block().type === 'image'}>
-                <ImageBlock image={block() as ImageContent} />
-              </Match>
-            </Switch>
-          )}
-        </Index>
-      </Show>
-    </div>
-  );
-}
-
-function AssistantView(props: {
+function AssistantView({
+  message,
+  isLastAssistant,
+  streaming,
+  resultFor,
+}: {
   message: AssistantMessage;
   isLastAssistant: boolean;
-  streaming: () => boolean;
+  streaming: boolean;
   resultFor: (id: string) => ToolResultMessage | undefined;
-}): JSX.Element {
-  const content = (): AssistantMessage['content'] => props.message.content;
+}) {
+  const content = message.content;
   const isTrailing = (i: number): boolean =>
-    props.isLastAssistant && props.streaming() && i === content().length - 1;
+    isLastAssistant && streaming && i === content.length - 1;
+
   return (
-    <Index each={content()}>
-      {(block, i) => (
-        <Switch>
-          <Match when={block().type === 'text'}>
+    <>
+      {content.map((block, i) => {
+        if (block.type === 'text') {
+          return (
             <TextBlock
-              text={(block() as TextContent).text}
-              inProgress={() => isTrailing(i)}
+              key={i}
+              text={(block as TextContent).text}
+              inProgress={isTrailing(i)}
             />
-          </Match>
-          <Match when={block().type === 'thinking'}>
+          );
+        }
+        if (block.type === 'thinking') {
+          return (
             <ThinkingBlock
-              thinking={(block() as { thinking: string }).thinking}
-              inProgress={() => isTrailing(i)}
+              key={i}
+              thinking={(block as { thinking: string }).thinking}
+              inProgress={isTrailing(i)}
             />
-          </Match>
-          <Match when={block().type === 'toolCall'}>
+          );
+        }
+        if (block.type === 'toolCall') {
+          return (
             <ToolCallBlock
-              call={block() as import('../../shared/protocol.js').ToolCall}
-              streaming={props.streaming}
-              resultFor={props.resultFor}
+              key={i}
+              call={block as ToolCall}
+              streaming={streaming}
+              resultFor={resultFor}
             />
-          </Match>
-        </Switch>
-      )}
-    </Index>
+          );
+        }
+        return null;
+      })}
+    </>
   );
 }
 
-function ToolCallBlock(props: {
-  call: import('../../shared/protocol.js').ToolCall;
-  streaming: () => boolean;
+function ToolCallBlock({
+  call,
+  streaming,
+  resultFor,
+}: {
+  call: ToolCall;
+  streaming: boolean;
   resultFor: (id: string) => ToolResultMessage | undefined;
-}): JSX.Element {
-  const Card = getToolCard(props.call.name);
-  const result = (): ToolResultMessage | undefined => props.resultFor(props.call.id);
-  const inProgress = (): boolean => {
-    const r = result();
-    return props.streaming() && (!r || r.content.length === 0);
-  };
-  const isError = (): boolean => result()?.isError ?? false;
-  return <Card call={props.call} result={result} inProgress={inProgress} isError={isError} />;
+}) {
+  const Card = getToolCard(call.name) as ComponentType<ToolCardProps>;
+  const result = resultFor(call.id);
+  const inProgress = streaming && (!result || result.content.length === 0);
+  const isError = result?.isError ?? false;
+  return <Card call={call} result={result} inProgress={inProgress} isError={isError} />;
 }
 
-function OrphanToolResult(props: { message: ToolResultMessage }): JSX.Element {
-  const Card = getToolCard(props.message.toolName);
+function OrphanToolResult({ message }: { message: ToolResultMessage }) {
+  const Card = getToolCard(message.toolName) as ComponentType<ToolCardProps>;
   // Synthesize the call from the result so the generic card has a name + id.
-  const call: import('../../shared/protocol.js').ToolCall = {
+  const call: ToolCall = {
     type: 'toolCall',
-    id: props.message.toolCallId,
-    name: props.message.toolName,
+    id: message.toolCallId,
+    name: message.toolName,
     arguments: {},
   };
   return (
     <Card
       call={call}
-      result={() => props.message}
-      inProgress={() => false}
-      isError={() => props.message.isError}
+      result={message}
+      inProgress={false}
+      isError={message.isError}
     />
   );
-}
-
-function GenericRoleView(props: { message: AgentMessage }): JSX.Element {
-  // Custom/unknown roles: show nothing structural rather than risk dumping.
-  return <Show when={false}>{String((props.message as { role: string }).role)}</Show>;
 }

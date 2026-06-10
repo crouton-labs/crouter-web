@@ -3,36 +3,48 @@
  *
  * Visually distinct, COLLAPSIBLE block, separate from assistant text. Collapsed
  * by default; a header toggles it. Streams incrementally — the body shows the
- * growing `thinking` text as escaped plain text (no markdown; thinking is
- * reasoning prose, and escaping keeps any embedded markup inert).
+ * growing `thinking` text as escaped plain text (no markdown; escaping keeps
+ * any embedded markup inert). Left-border accent in the `thinking` token color.
  */
 
-import { createSignal, Show, type JSX } from 'solid-js';
+import { useState } from 'react';
 import { escapeText } from '../render/sanitize.js';
-import { ensureStyles } from './styles.js';
 
 export interface ThinkingBlockProps {
   thinking: string;
-  /** True while still streaming — keeps the body visible as it grows. */
-  inProgress: () => boolean;
+  /** True while still streaming — auto-expands so progress is visible. */
+  inProgress: boolean;
 }
 
-export function ThinkingBlock(props: ThinkingBlockProps): JSX.Element {
-  ensureStyles();
-  const [open, setOpen] = createSignal(false);
-  // Auto-reveal while actively streaming so progress is visible; user can still
-  // collapse it, and it defaults collapsed once finished.
-  const expanded = (): boolean => open() || props.inProgress();
+export function ThinkingBlock({ thinking, inProgress }: ThinkingBlockProps) {
+  const [open, setOpen] = useState(false);
+  // Auto-reveal while actively streaming; user can still collapse; defaults
+  // collapsed once finished.
+  const expanded = open || inProgress;
 
   return (
-    <div class="cw-think">
-      <div class="cw-think-head" onClick={() => setOpen((v) => !v)}>
-        <span classList={{ 'cw-caret': true, 'cw-caret-open': expanded() }}>▶</span>
-        <span>Thinking{props.inProgress() ? '…' : ''}</span>
+    <div
+      className="border-l-[3px] rounded-r-md my-1.5 bg-muted/40"
+      style={{ borderLeftColor: 'var(--thinking)' }}
+    >
+      <div
+        className="cursor-pointer select-none px-[10px] py-[5px] text-xs opacity-80 flex gap-1.5 items-center"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span
+          className="inline-block transition-transform duration-[0.12s]"
+          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        >
+          ▶
+        </span>
+        <span>Thinking{inProgress ? '…' : ''}</span>
       </div>
-      <Show when={expanded()}>
-        <div class="cw-think-body" innerHTML={escapeText(props.thinking ?? '')} />
-      </Show>
+      {expanded && (
+        <div
+          className="px-3 pb-[10px] pt-[2px] whitespace-pre-wrap text-[13px] opacity-85"
+          dangerouslySetInnerHTML={{ __html: escapeText(thinking ?? '') }}
+        />
+      )}
     </div>
   );
 }

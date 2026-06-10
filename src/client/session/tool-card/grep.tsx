@@ -6,34 +6,31 @@
  * are not markdown and must stay inert.
  */
 
-import { For, Show, type JSX } from 'solid-js';
 import { escapeText } from '../../render/sanitize.js';
-import { ToolCardShell, ResultImages, resultText, type ToolCardProps } from './parts.js';
+import { ToolCardShell, ResultImages, resultText, EMPTY_CLASSES, type ToolCardProps } from './parts.js';
 
 function pattern(args: Record<string, unknown>): string {
   const p = args.pattern ?? args.query ?? args.regex ?? args.search;
   return typeof p === 'string' ? p : '';
 }
 
-export function GrepCard(props: ToolCardProps): JSX.Element {
-  const pat = (): string => pattern(props.call.arguments ?? {});
-  const lines = (): string[] => {
-    const t = resultText(props.result());
-    if (!t) return [];
-    return t.split('\n').filter((l) => l.length > 0);
-  };
+export function GrepCard(props: ToolCardProps) {
+  const pat = pattern(props.call.arguments ?? {});
+  const text = resultText(props.result);
+  const lines = text ? text.split('\n').filter((l) => l.length > 0) : [];
+  const inProgress = props.inProgress;
   return (
-    <ToolCardShell call={props.call} subtitle={pat()} inProgress={props.inProgress} isError={props.isError}>
-      <Show
-        when={lines().length > 0}
-        fallback={<Show when={!props.inProgress()}><div class="cw-empty">no matches</div></Show>}
-      >
-        <div class="cw-diff">
-          <For each={lines()}>
-            {(l) => <div class="cw-grep-file" innerHTML={escapeText(l)} />}
-          </For>
-        </div>
-      </Show>
+    <ToolCardShell call={props.call} subtitle={pat} inProgress={inProgress} isError={props.isError}>
+      {lines.length > 0
+        ? (
+          <div className="m-0 font-mono text-xs overflow-auto max-h-[460px]">
+            {lines.map((l, i) => (
+              <div key={i} className="px-[11px] py-1 font-mono text-xs opacity-85" dangerouslySetInnerHTML={{ __html: escapeText(l) }} />
+            ))}
+          </div>
+        )
+        : (!inProgress && <div className={EMPTY_CLASSES}>no matches</div>)
+      }
       <ResultImages result={props.result} />
     </ToolCardShell>
   );

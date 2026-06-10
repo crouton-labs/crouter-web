@@ -1,13 +1,16 @@
 /**
  * Shared tool-card scaffolding (spec C.6/AC-7, design D10).
  *
- * `ToolCardProps` is the contract every card renders against; `ToolCardShell`
- * gives the common chrome (tool name + subtitle + status pill + error border);
- * the helpers pull text/images out of `ToolResultMessage.content` and pretty-
- * print args WITHOUT ever dumping raw JSON as the card body.
+ * `ToolCardProps` is the contract every card renders against (plain values, not
+ * accessors); `ToolCardShell` gives the common chrome (tool name + subtitle +
+ * status pill + error border) built from shadcn Card primitives; the helpers
+ * pull text/images out of `ToolResultMessage.content` and pretty-print args
+ * WITHOUT ever dumping raw JSON as the card body.
  */
 
-import { For, Show, type JSX } from 'solid-js';
+import type { ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils.js';
 import type {
   ToolCall,
   ToolResultMessage,
@@ -15,18 +18,29 @@ import type {
   ImageContent,
 } from '../../../shared/protocol.js';
 import { ImageBlock } from '../image-block.js';
-import { ensureStyles } from '../styles.js';
+
+/** Markdown-body styling (the `.cw-md` equivalent; mirrors text-block). */
+export const MD_CLASSES =
+  '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-muted [&_code]:font-mono [&_code]:text-[12.5px] [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-[5px] [&_:not(pre)>code]:py-[1px] [&_:not(pre)>code]:rounded [&_p]:my-[0.4em] [&_a]:text-primary';
+
+/** Terminal output block (`.cw-term`); pair with `TERM_ERR` via `cn` for errors. */
+export const TERM_CLASSES =
+  'm-0 px-[11px] py-[9px] bg-[#0c0f13] text-[#d6dde6] font-mono text-xs whitespace-pre-wrap overflow-auto max-h-[420px]';
+export const TERM_ERR = 'text-[#ff9b8a]';
+
+/** Italic muted placeholder (`.cw-empty`). */
+export const EMPTY_CLASSES = 'px-[11px] py-2 opacity-50 text-xs italic';
 
 /** Contract for every tool-card renderer (paired call + result). */
 export interface ToolCardProps {
   /** The assistant's tool-call block (name + structured arguments). */
   call: ToolCall;
-  /** The matching tool result, or undefined until it starts/arrives. */
-  result: () => ToolResultMessage | undefined;
+  /** The matching tool result, or undefined until it arrives. */
+  result: ToolResultMessage | undefined;
   /** True while the tool is still executing (no/empty result + streaming). */
-  inProgress: () => boolean;
+  inProgress: boolean;
   /** True when the tool reported an error. */
-  isError: () => boolean;
+  isError: boolean;
 }
 
 /** Concatenate the text blocks of a tool result. */
@@ -74,44 +88,65 @@ export function callSubtitle(call: ToolCall): string {
 export interface ShellProps {
   call: ToolCall;
   subtitle?: string;
-  inProgress: () => boolean;
-  isError: () => boolean;
-  children: JSX.Element;
+  inProgress: boolean;
+  isError: boolean;
+  children: ReactNode;
 }
 
-/** Common card chrome: header (tool, subtitle, status pill) + body slot. */
-export function ToolCardShell(props: ShellProps): JSX.Element {
-  ensureStyles();
-  const sub = (): string => props.subtitle ?? callSubtitle(props.call);
+/** Common card chrome: header (tool name, subtitle, status pill) + body slot. */
+export function ToolCardShell({ call, subtitle, inProgress, isError, children }: ShellProps) {
+  const sub = subtitle ?? callSubtitle(call);
   return (
-    <div classList={{ 'cw-card': true, 'cw-card-err': props.isError() }}>
-      <div class="cw-card-head">
-        <span class="cw-card-tool">{props.call.name}</span>
-        <Show when={sub()}>
-          <span class="cw-card-sub">{sub()}</span>
-        </Show>
-        <Show when={props.inProgress()}>
-          <span class="cw-pill cw-pill-run">
-            <span class="cw-spinner" /> running
+    <div
+      className={cn(
+        'border rounded-lg my-1.5 overflow-hidden bg-card text-card-foreground',
+        isError && 'border-destructive',
+      )}
+    >
+      {/* Header — .cw-card-head equivalent */}
+      <div className="flex items-center gap-2 px-[10px] py-[6px] bg-muted/50 text-[12.5px]">
+        <span className="font-semibold font-mono">{call.name}</span>
+        {sub && (
+          <span className="opacity-60 font-mono text-[11.5px] overflow-hidden text-ellipsis whitespace-nowrap">
+            {sub}
           </span>
-        </Show>
-        <Show when={!props.inProgress() && props.isError()}>
-          <span class="cw-pill cw-pill-err">error</span>
-        </Show>
-        <Show when={!props.inProgress() && !props.isError()}>
-          <span class="cw-pill cw-pill-ok">done</span>
-        </Show>
+        )}
+        {/* Status pill — .cw-pill-* equivalent */}
+        <div className="ml-auto shrink-0">
+          {inProgress ? (
+            <span className="inline-flex items-center gap-1 text-[10.5px] px-[7px] py-[1px] rounded-full bg-blue-950/70 text-blue-300 whitespace-nowrap">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              running
+            </span>
+          ) : isError ? (
+            <span className="inline-flex items-center text-[10.5px] px-[7px] py-[1px] rounded-full bg-destructive/20 text-destructive-foreground border border-destructive/40 whitespace-nowrap">
+              error
+            </span>
+          ) : (
+            <span className="inline-flex items-center text-[10.5px] px-[7px] py-[1px] rounded-full whitespace-nowrap"
+              style={{ background: 'oklch(0.72 0.16 145 / 0.2)', color: 'var(--success)' }}>
+              done
+            </span>
+          )}
+        </div>
       </div>
-      <div class="cw-card-body">{props.children}</div>
+      {/* Body slot */}
+      <div>{children}</div>
     </div>
   );
 }
 
 /** Render any image blocks attached to a tool result. */
-export function ResultImages(props: { result: () => ToolResultMessage | undefined }): JSX.Element {
+export function ResultImages({ result }: { result: ToolResultMessage | undefined }) {
+  const images = resultImages(result);
+  if (images.length === 0) return null;
   return (
-    <For each={resultImages(props.result())}>
-      {(img) => <div style={{ padding: '4px 11px' }}><ImageBlock image={img} /></div>}
-    </For>
+    <>
+      {images.map((img, i) => (
+        <div key={i} className="px-[11px] py-1">
+          <ImageBlock image={img} />
+        </div>
+      ))}
+    </>
   );
 }

@@ -4,49 +4,50 @@
  * DIFF view of the old → new strings from the call arguments. Lines are escaped
  * plain text (file content is not markdown). The result text (e.g. a success
  * confirmation or error) shows beneath the diff with error treatment.
+ * Diff colors: add → cw-diff-add (success bg), del → cw-diff-del (destructive bg).
  */
 
-import { For, Show, type JSX } from 'solid-js';
+import { cn } from '@/lib/utils.js';
 import { escapeText } from '../../render/sanitize.js';
 import { lineDiff } from './diff.js';
-import { ToolCardShell, ResultImages, resultText, callSubtitle, type ToolCardProps } from './parts.js';
+import { ToolCardShell, ResultImages, resultText, callSubtitle, TERM_CLASSES, TERM_ERR, EMPTY_CLASSES, type ToolCardProps } from './parts.js';
 
 function pick(args: Record<string, unknown>, keys: string[]): string {
   for (const k of keys) if (typeof args[k] === 'string') return args[k] as string;
   return '';
 }
 
-export function EditCard(props: ToolCardProps): JSX.Element {
-  const args = (): Record<string, unknown> => props.call.arguments ?? {};
-  const oldS = (): string => pick(args(), ['old_string', 'oldText', 'old', 'before', 'search']);
-  const newS = (): string => pick(args(), ['new_string', 'newText', 'new', 'after', 'replace']);
-  const diff = (): ReturnType<typeof lineDiff> => lineDiff(oldS(), newS());
-  const note = (): string => resultText(props.result());
+export function EditCard(props: ToolCardProps) {
+  const args = props.call.arguments ?? {};
+  const oldS = pick(args, ['old_string', 'oldText', 'old', 'before', 'search']);
+  const newS = pick(args, ['new_string', 'newText', 'new', 'after', 'replace']);
+  const diff = lineDiff(oldS, newS);
+  const note = resultText(props.result);
+  const isError = props.isError;
   return (
-    <ToolCardShell call={props.call} subtitle={callSubtitle(props.call)} inProgress={props.inProgress} isError={props.isError}>
-      <Show
-        when={oldS() || newS()}
-        fallback={<div class="cw-empty">no diff available</div>}
-      >
-        <div class="cw-diff">
-          <For each={diff()}>
-            {(ln) => (
+    <ToolCardShell call={props.call} subtitle={callSubtitle(props.call)} inProgress={props.inProgress} isError={isError}>
+      {(oldS || newS)
+        ? (
+          <div className="m-0 font-mono text-xs overflow-auto max-h-[460px]">
+            {diff.map((ln, i) => (
               <div
-                classList={{
-                  'cw-diff-line': true,
-                  'cw-diff-add': ln.kind === 'add',
-                  'cw-diff-del': ln.kind === 'del',
-                  'cw-diff-ctx': ln.kind === 'ctx',
-                }}
-                innerHTML={(ln.kind === 'add' ? '+ ' : ln.kind === 'del' ? '- ' : '  ') + escapeText(ln.text)}
+                key={i}
+                className={cn(
+                  'px-[11px] whitespace-pre-wrap',
+                  ln.kind === 'add' && 'bg-[rgba(46,160,67,0.18)] text-[#aef0bf]',
+                  ln.kind === 'del' && 'bg-[rgba(192,57,43,0.18)] text-[#ffb4ab]',
+                  ln.kind === 'ctx' && 'opacity-70',
+                )}
+                dangerouslySetInnerHTML={{ __html: (ln.kind === 'add' ? '+ ' : ln.kind === 'del' ? '- ' : '  ') + escapeText(ln.text) }}
               />
-            )}
-          </For>
-        </div>
-      </Show>
-      <Show when={note()}>
-        <div classList={{ 'cw-term': true, 'cw-term-err': props.isError() }} innerHTML={escapeText(note())} />
-      </Show>
+            ))}
+          </div>
+        )
+        : <div className={EMPTY_CLASSES}>no diff available</div>
+      }
+      {note && (
+        <div className={cn(TERM_CLASSES, isError && TERM_ERR)} dangerouslySetInnerHTML={{ __html: escapeText(note) }} />
+      )}
       <ResultImages result={props.result} />
     </ToolCardShell>
   );

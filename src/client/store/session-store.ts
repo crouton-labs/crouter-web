@@ -1,13 +1,16 @@
 /**
- * Per-node session store (seam.md "Worker S store shape"). Owns a session
- * socket, folds the live stream through the SHARED message reducer (the same
- * one the server hub uses, D12), and exposes Solid accessors the node-page and
- * its chrome/presence/palette/dialog children read. Chrome is RENDERED from the
- * server-pushed `chrome`/`snapshot` fields — never computed from raw events
- * (D12) — so the store only stores what the server sends.
+ * Per-node session store. Owns a session socket, folds the live stream through
+ * the SHARED message reducer (the same one the server hub uses, D12), and
+ * exposes plain reactive values the node-page and its chrome/presence/palette/
+ * dialog children read. Chrome is RENDERED from the server-pushed `chrome`/
+ * `snapshot` fields — never computed from raw events (D12) — so the store only
+ * stores what the server sends.
+ *
+ * Self-managing React hook — connects on mount (or nodeId change), disposes on
+ * unmount.
  */
 
-import { createSignal } from 'solid-js';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { applyEvent, initMessages } from '../../shared/message-reducer.js';
 import type {
   AgentMessage,
@@ -25,6 +28,7 @@ import type {
   WsServerMsg,
 } from '../../shared/protocol.js';
 import { openSessionSocket, type SessionSocket } from '../api/session-socket.js';
+import { useServerStatus } from '../lib/server-status.js';
 
 /** Web-shaped chrome the SPA renders (mirrors `NodeDetail`'s chrome subset). */
 export interface NodeChrome {
@@ -46,23 +50,20 @@ const EMPTY_CHROME: NodeChrome = {
 };
 
 export interface SessionStore {
-  // --- accessors ---
-  messages: () => AgentMessage[];
-  state: () => SessionState | null;
-  role: () => WebRole;
-  chrome: () => NodeChrome;
-  dialog: () => RpcExtensionUIRequest | null;
-  presence: () => Presence;
-  brokerStatus: () => BrokerStatus;
-  source: () => 'broker' | 'static';
+  // --- plain values ---
+  messages: AgentMessage[];
+  state: SessionState | null;
+  role: WebRole;
+  chrome: NodeChrome;
+  dialog: RpcExtensionUIRequest | null;
+  presence: Presence;
+  brokerStatus: BrokerStatus;
+  source: 'broker' | 'static';
   /** Server-bridge socket connectivity (distinct from broker liveness): false
    * while the SPA↔server WS is down, e.g. a server restart (§7). */
-  serverConnected: () => boolean;
+  serverConnected: boolean;
   /** Last surfaced WS error, for transient UI; cleared on next snapshot. */
-  error: () => { code: string; message: string } | null;
-  // --- lifecycle ---
-  connect: () => void;
-  dispose: () => void;
+  error: { code: string; message: string } | null;
   // --- send wrappers (controller-only frames gated server-side) ---
   prompt: (text: string, images?: ImageContent[]) => void;
   steer: (text: string, images?: ImageContent[]) => void;
@@ -76,113 +77,148 @@ export interface SessionStore {
   dialogResponse: (requestId: string, response: DialogResponseValue) => void;
 }
 
-/** Build a session store bound to `nodeId`. Call `connect()` to open the socket. */
-export function createSessionStore(nodeId: string): SessionStore {
-  const [messages, setMessages] = createSignal<AgentMessage[]>([]);
-  const [state, setState] = createSignal<SessionState | null>(null);
-  const [role, setRole] = createSignal<WebRole>('observer');
-  const [chrome, setChrome] = createSignal<NodeChrome>(EMPTY_CHROME);
-  const [dialog, setDialog] = createSignal<RpcExtensionUIRequest | null>(null);
-  const [presence, setPresence] = createSignal<Presence>({ viewers: 0, controller: null });
-  const [brokerStatus, setBrokerStatus] = createSignal<BrokerStatus>('connected');
-  const [source, setSource] = createSignal<'broker' | 'static'>('broker');
-  const [serverConnected, setServerConnected] = createSignal(true);
-  const [error, setError] = createSignal<{ code: string; message: string } | null>(null);
+/** Open a session stream for `nodeId` and return plain reactive values + send methods. */
+export function useSessionStore(nodeId: string): SessionStore {
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [state, setState] = useState<SessionState | null>(null);
+  const [role, setRole] = useState<WebRole>('observer');
+  const [chrome, setChrome] = useState<NodeChrome>(EMPTY_CHROME);
+  const [dialog, setDialog] = useState<RpcExtensionUIRequest | null>(null);
+  const [presence, setPresence] = useState<Presence>({ viewers: 0, controller: null });
+  const [brokerStatus, setBrokerStatus] = useState<BrokerStatus>('connected');
+  const [source, setSource] = useState<'broker' | 'static'>('broker');
+  const [serverConnected, setServerConnected] = useState(true);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
-  let socket: SessionSocket | null = null;
+  const socketRef = useRef<SessionSocket | null>(null);
 
-  const onServerMsg = (msg: WsServerMsg): void => {
-    switch (msg.type) {
-      case 'snapshot': {
-        setMessages(initMessages(msg.history));
-        setState(msg.state);
-        setRole(msg.role);
-        setPresence({ viewers: msg.viewers, controller: msg.controller });
-        setSource(msg.source);
-        setDialog(msg.pending_dialog ?? null);
-        setError(null);
-        // Seed chrome from the snapshot's pi stats + engine state (D12). The
-        // server's coalesced `chrome` pushes refine these over the session.
-        setChrome(seedChrome(msg));
-        break;
-      }
-      case 'event': {
-        setMessages((prev) => applyEvent(prev, msg.event));
-        // Reflect the streaming/idle indicator (C.10) from turn boundaries.
-        const ev = msg.event;
-        if (ev.type === 'agent_start') setStreaming(true);
-        else if (ev.type === 'agent_end') setStreaming(false);
-        break;
-      }
-      case 'control_changed': {
-        setRole(msg.you_are);
-        setPresence((p) => ({ ...p, controller: msg.controller }));
-        break;
-      }
-      case 'dialog': {
-        setDialog(msg.request);
-        break;
-      }
-      case 'chrome': {
-        setChrome((c) => mergeChrome(c, msg));
-        break;
-      }
-      case 'broker_status': {
-        setBrokerStatus(msg.state);
-        break;
-      }
-      case 'ack': {
-        if (!msg.ok) setError({ code: 'ack', message: msg.detail ?? `command ${msg.for} failed` });
-        break;
-      }
-      case 'error': {
-        setError({ code: msg.code, message: msg.message });
-        break;
-      }
-    }
-  };
+  useEffect(() => {
+    // Reset to blank state when nodeId changes.
+    setMessages([]);
+    setState(null);
+    setRole('observer');
+    setChrome(EMPTY_CHROME);
+    setDialog(null);
+    setPresence({ viewers: 0, controller: null });
+    setBrokerStatus('connected');
+    setSource('broker');
+    setServerConnected(true);
+    setError(null);
 
-  const setStreaming = (isStreaming: boolean): void => {
-    setState((s) => (s ? { ...s, isStreaming } : s));
-  };
-
-  const seedChrome = (msg: Extract<WsServerMsg, { type: 'snapshot' }>): NodeChrome => {
-    const stats = msg.stats;
-    const cu = stats.contextUsage;
-    return {
-      branch: null,
-      model: msg.state.model,
-      tokens: {
-        input: stats.tokens.input,
-        output: stats.tokens.output,
-        cache: stats.tokens.cacheRead,
-      },
-      context: cu
-        ? { tokens: cu.tokens ?? 0, window: cu.contextWindow, percent: cu.percent ?? 0 }
-        : null,
-      tool_calls: stats.toolCalls,
-      stats: {
-        turns: stats.assistantMessages,
-        user_messages: stats.userMessages,
-        assistant_messages: stats.assistantMessages,
-        cost: stats.cost,
-      },
+    const onServerMsg = (msg: WsServerMsg): void => {
+      switch (msg.type) {
+        case 'snapshot': {
+          setMessages(initMessages(msg.history));
+          setState(msg.state);
+          setRole(msg.role);
+          setPresence({ viewers: msg.viewers, controller: msg.controller });
+          setSource(msg.source);
+          setDialog(msg.pending_dialog ?? null);
+          setError(null);
+          // Seed chrome from the snapshot's pi stats + engine state (D12). The
+          // server's coalesced `chrome` pushes refine these over the session.
+          setChrome(seedChrome(msg));
+          break;
+        }
+        case 'event': {
+          setMessages((prev) => applyEvent(prev, msg.event));
+          // Reflect the streaming/idle indicator (C.10) from turn boundaries.
+          const ev = msg.event;
+          if (ev.type === 'agent_start') setState((s) => (s ? { ...s, isStreaming: true } : s));
+          else if (ev.type === 'agent_end') setState((s) => (s ? { ...s, isStreaming: false } : s));
+          break;
+        }
+        case 'control_changed': {
+          setRole(msg.you_are);
+          setPresence((p) => ({ ...p, controller: msg.controller }));
+          break;
+        }
+        case 'dialog': {
+          setDialog(msg.request);
+          break;
+        }
+        case 'chrome': {
+          setChrome((c) => mergeChrome(c, msg));
+          break;
+        }
+        case 'broker_status': {
+          setBrokerStatus(msg.state);
+          break;
+        }
+        case 'ack': {
+          if (!msg.ok)
+            setError({ code: 'ack', message: msg.detail ?? `command ${msg.for} failed` });
+          break;
+        }
+        case 'error': {
+          setError({ code: msg.code, message: msg.message });
+          break;
+        }
+      }
     };
-  };
 
-  const mergeChrome = (
-    c: NodeChrome,
-    msg: Extract<WsServerMsg, { type: 'chrome' }>,
-  ): NodeChrome => ({
-    branch: msg.branch !== undefined ? msg.branch : c.branch,
-    model: msg.model !== undefined ? msg.model : c.model,
-    tokens: msg.tokens !== undefined ? msg.tokens : c.tokens,
-    context: msg.context !== undefined ? msg.context : c.context,
-    tool_calls: msg.tool_calls !== undefined ? msg.tool_calls : c.tool_calls,
-    stats: msg.stats !== undefined ? msg.stats : c.stats,
-  });
+    // A transport close means the SPA↔server bridge dropped (server restart),
+    // NOT that the broker died — broker liveness arrives via explicit
+    // `broker_status` frames on a live socket (m2). Surface server
+    // connectivity separately and let the socket auto-reconnect + re-snapshot.
+    socketRef.current = openSessionSocket(nodeId, {
+      onMessage: onServerMsg,
+      onOpen: () => {
+        setServerConnected(true);
+        useServerStatus.getState().setReachable(true);
+      },
+      onClose: () => {
+        setServerConnected(false);
+        useServerStatus.getState().setReachable(false);
+      },
+    });
 
-  const send = socketSender(() => socket);
+    return () => {
+      socketRef.current?.close();
+      socketRef.current = null;
+    };
+  }, [nodeId]);
+
+  const prompt = useCallback((text: string, images?: ImageContent[]) => {
+    socketRef.current?.send({ type: 'prompt', text, ...(images ? { images } : {}) });
+  }, []);
+
+  const steer = useCallback((text: string, images?: ImageContent[]) => {
+    socketRef.current?.send({ type: 'steer', text, ...(images ? { images } : {}) });
+  }, []);
+
+  const abort = useCallback(() => {
+    socketRef.current?.send({ type: 'abort' });
+  }, []);
+
+  const setModel = useCallback((model: string) => {
+    socketRef.current?.send({ type: 'set_model', model });
+  }, []);
+
+  const cycleModel = useCallback(() => {
+    socketRef.current?.send({ type: 'cycle_model' });
+  }, []);
+
+  const setThinkingLevel = useCallback((level: ThinkingLevel) => {
+    socketRef.current?.send({ type: 'set_thinking_level', level });
+  }, []);
+
+  const compact = useCallback((instructions?: string) => {
+    socketRef.current?.send({ type: 'compact', ...(instructions ? { instructions } : {}) });
+  }, []);
+
+  const requestControl = useCallback(() => {
+    socketRef.current?.send({ type: 'request_control' });
+  }, []);
+
+  const releaseControl = useCallback(() => {
+    socketRef.current?.send({ type: 'release_control' });
+  }, []);
+
+  const dialogResponse = useCallback((requestId: string, response: DialogResponseValue) => {
+    socketRef.current?.send({ type: 'dialog_response', request_id: requestId, response });
+    setDialog(null);
+  }, []);
 
   return {
     messages,
@@ -195,58 +231,57 @@ export function createSessionStore(nodeId: string): SessionStore {
     source,
     serverConnected,
     error,
-    connect() {
-      if (socket) return;
-      // A transport close means the SPA↔server bridge dropped (server restart),
-      // NOT that the broker died — broker liveness arrives via explicit
-      // `broker_status` frames on a live socket (m2). Surface server
-      // connectivity separately and let the socket auto-reconnect + re-snapshot.
-      socket = openSessionSocket(nodeId, {
-        onMessage: onServerMsg,
-        onOpen: () => setServerConnected(true),
-        onClose: () => setServerConnected(false),
-      });
+    prompt,
+    steer,
+    abort,
+    setModel,
+    cycleModel,
+    setThinkingLevel,
+    compact,
+    requestControl,
+    releaseControl,
+    dialogResponse,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Pure chrome helpers (module-level — no React deps)
+// ---------------------------------------------------------------------------
+
+function seedChrome(msg: Extract<WsServerMsg, { type: 'snapshot' }>): NodeChrome {
+  const stats = msg.stats;
+  const cu = stats.contextUsage;
+  return {
+    branch: null,
+    model: msg.state.model,
+    tokens: {
+      input: stats.tokens.input,
+      output: stats.tokens.output,
+      cache: stats.tokens.cacheRead,
     },
-    dispose() {
-      socket?.close();
-      socket = null;
-    },
-    prompt(text, images) {
-      send({ type: 'prompt', text, ...(images ? { images } : {}) });
-    },
-    steer(text, images) {
-      send({ type: 'steer', text, ...(images ? { images } : {}) });
-    },
-    abort() {
-      send({ type: 'abort' });
-    },
-    setModel(model) {
-      send({ type: 'set_model', model });
-    },
-    cycleModel() {
-      send({ type: 'cycle_model' });
-    },
-    setThinkingLevel(level) {
-      send({ type: 'set_thinking_level', level });
-    },
-    compact(instructions) {
-      send({ type: 'compact', ...(instructions ? { instructions } : {}) });
-    },
-    requestControl() {
-      send({ type: 'request_control' });
-    },
-    releaseControl() {
-      send({ type: 'release_control' });
-    },
-    dialogResponse(requestId, response) {
-      send({ type: 'dialog_response', request_id: requestId, response });
-      setDialog(null);
+    context: cu
+      ? { tokens: cu.tokens ?? 0, window: cu.contextWindow, percent: cu.percent ?? 0 }
+      : null,
+    tool_calls: stats.toolCalls,
+    stats: {
+      turns: stats.assistantMessages,
+      user_messages: stats.userMessages,
+      assistant_messages: stats.assistantMessages,
+      cost: stats.cost,
     },
   };
 }
 
-function socketSender(get: () => SessionSocket | null) {
-  return (msg: import('../../shared/protocol.js').WsClientMsg): void => {
-    get()?.send(msg);
+function mergeChrome(
+  c: NodeChrome,
+  msg: Extract<WsServerMsg, { type: 'chrome' }>,
+): NodeChrome {
+  return {
+    branch: msg.branch !== undefined ? msg.branch : c.branch,
+    model: msg.model !== undefined ? msg.model : c.model,
+    tokens: msg.tokens !== undefined ? msg.tokens : c.tokens,
+    context: msg.context !== undefined ? msg.context : c.context,
+    tool_calls: msg.tool_calls !== undefined ? msg.tool_calls : c.tool_calls,
+    stats: msg.stats !== undefined ? msg.stats : c.stats,
   };
 }

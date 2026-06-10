@@ -5,3 +5,4 @@ yalc.lock
 *.log
 .DS_Store
 test/fixtures/tmp/
+verify-shots/

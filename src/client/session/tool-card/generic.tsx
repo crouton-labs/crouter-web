@@ -6,31 +6,29 @@
  * raw single-line JSON blob, satisfying C.6's "structured card, never raw JSON".
  */
 
-import { Show, type JSX } from 'solid-js';
+import { cn } from '@/lib/utils.js';
 import { renderMarkdown } from '../../render/markdown.js';
-import { ToolCardShell, ResultImages, prettyArgs, resultText, type ToolCardProps } from './parts.js';
+import { ToolCardShell, ResultImages, prettyArgs, resultText, MD_CLASSES, EMPTY_CLASSES, TERM_ERR, type ToolCardProps } from './parts.js';
 
 export type { ToolCardProps };
 
-export function GenericCard(props: ToolCardProps): JSX.Element {
-  const args = (): string => prettyArgs(props.call.arguments);
-  const text = (): string => resultText(props.result());
+export function GenericCard(props: ToolCardProps) {
+  const args = prettyArgs(props.call.arguments);
+  const text = resultText(props.result);
+  const isError = props.isError;
+  const inProgress = props.inProgress;
   return (
-    <ToolCardShell call={props.call} inProgress={props.inProgress} isError={props.isError}>
-      <Show when={args()}>
-        <pre class="cw-args">{args()}</pre>
-      </Show>
-      <Show when={text()}>
+    <ToolCardShell call={props.call} inProgress={inProgress} isError={isError}>
+      {args && <pre className="m-0 px-[11px] py-2 bg-[#11161c] font-mono text-[11.5px] whitespace-pre-wrap overflow-auto max-h-[240px] border-b border-[#222b35]">{args}</pre>}
+      {text && (
         <div
-          classList={{ 'cw-md': true, 'cw-term-err': props.isError() }}
+          className={cn(MD_CLASSES, isError && TERM_ERR)}
           style={{ padding: '8px 11px' }}
-          innerHTML={renderMarkdown(text())}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
         />
-      </Show>
+      )}
       <ResultImages result={props.result} />
-      <Show when={!args() && !text() && !props.inProgress()}>
-        <div class="cw-empty">no output</div>
-      </Show>
+      {!args && !text && !inProgress && <div className={EMPTY_CLASSES}>no output</div>}
     </ToolCardShell>
   );
 }
