@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"019eadba-0000-7000-0000-000000000001","timestamp":"2026-06-09T18:00:00.000Z","cwd":"/tmp/linear"}
+{"type":"model_change","id":"m1000000","parentId":null,"timestamp":"2026-06-09T18:00:01.000Z","provider":"anthropic","modelId":"claude-opus-4-8"}
+{"type":"thinking_level_change","id":"t1000000","parentId":"m1000000","timestamp":"2026-06-09T18:00:02.000Z","thinkingLevel":"medium"}
+{"type":"message","id":"u1000000","parentId":"t1000000","timestamp":"2026-06-09T18:00:03.000Z","message":{"role":"user","content":[{"type":"text","text":"What is 2 + 2?"}],"timestamp":1780000003000}}
+{"type":"message","id":"a1000000","parentId":"u1000000","timestamp":"2026-06-09T18:00:04.000Z","message":{"role":"assistant","content":[{"type":"text","text":"2 + 2 = 4."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-opus-4-8","usage":{"input":12,"output":8},"stopReason":"end_turn","timestamp":1780000004000}}

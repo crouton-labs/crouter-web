@@ -1,0 +1,8 @@
+{"type":"session","version":3,"id":"019eadba-0000-7000-0000-000000000004","timestamp":"2026-06-09T18:30:00.000Z","cwd":"/tmp/model-change"}
+{"type":"model_change","id":"m4aaaaaa","parentId":null,"timestamp":"2026-06-09T18:30:01.000Z","provider":"anthropic","modelId":"claude-sonnet-4-5"}
+{"type":"message","id":"u4aaaaaa","parentId":"m4aaaaaa","timestamp":"2026-06-09T18:30:02.000Z","message":{"role":"user","content":[{"type":"text","text":"First question on sonnet."}],"timestamp":1780001802000}}
+{"type":"message","id":"a4aaaaaa","parentId":"u4aaaaaa","timestamp":"2026-06-09T18:30:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Answer on sonnet."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":11,"output":5},"stopReason":"end_turn","timestamp":1780001803000}}
+{"type":"model_change","id":"m4bbbbbb","parentId":"a4aaaaaa","timestamp":"2026-06-09T18:30:04.000Z","provider":"openai","modelId":"gpt-5-2"}
+{"type":"thinking_level_change","id":"t4bbbbbb","parentId":"m4bbbbbb","timestamp":"2026-06-09T18:30:05.000Z","thinkingLevel":"high"}
+{"type":"message","id":"u4bbbbbb","parentId":"t4bbbbbb","timestamp":"2026-06-09T18:30:06.000Z","message":{"role":"user","content":[{"type":"text","text":"Second question after model switch."}],"timestamp":1780001806000}}
+{"type":"message","id":"a4bbbbbb","parentId":"u4bbbbbb","timestamp":"2026-06-09T18:30:07.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Answer on gpt."}],"api":"openai-responses","provider":"openai","model":"gpt-5-2","usage":{"input":14,"output":4},"stopReason":"end_turn","timestamp":1780001807000}}

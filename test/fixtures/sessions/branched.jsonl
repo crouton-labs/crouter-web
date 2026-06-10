@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"019eadba-0000-7000-0000-000000000002","timestamp":"2026-06-09T18:10:00.000Z","cwd":"/tmp/branched"}
+{"type":"model_change","id":"m2000000","parentId":null,"timestamp":"2026-06-09T18:10:01.000Z","provider":"anthropic","modelId":"claude-opus-4-8"}
+{"type":"message","id":"u2000000","parentId":"m2000000","timestamp":"2026-06-09T18:10:02.000Z","message":{"role":"user","content":[{"type":"text","text":"Name a color."}],"timestamp":1780000602000}}
+{"type":"message","id":"a2aaaaaa","parentId":"u2000000","timestamp":"2026-06-09T18:10:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"ABANDONED_BRANCH_RED"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-opus-4-8","usage":{"input":10,"output":4},"stopReason":"end_turn","timestamp":1780000603000}}
+{"type":"message","id":"a2bbbbbb","parentId":"u2000000","timestamp":"2026-06-09T18:10:04.000Z","message":{"role":"assistant","content":[{"type":"text","text":"ACTIVE_BRANCH_BLUE"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-opus-4-8","usage":{"input":10,"output":4},"stopReason":"end_turn","timestamp":1780000604000}}
