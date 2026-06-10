@@ -1,0 +1,47 @@
+{
+  "name": "@crouton-kit/crouter-web",
+  "version": "0.0.0",
+  "description": "Hostable web frontend for the crouter agent runtime — survey the canvas and drive headless pi sessions in a browser.",
+  "type": "module",
+  "bin": {
+    "crouter-web": "dist/server/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "tsc -p tsconfig.json",
+    "build:client": "vite build",
+    "dev:server": "tsx watch src/server/cli.ts serve",
+    "dev:client": "vite",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "test": "node --import tsx/esm --test \"src/**/__tests__/*.test.ts\"",
+    "start": "node dist/server/cli.js serve"
+  },
+  "dependencies": {
+    "@crouton-kit/crouter": "latest",
+    "@earendil-works/pi-agent-core": "^0.79.0",
+    "@earendil-works/pi-ai": "^0.79.0",
+    "@earendil-works/pi-coding-agent": "^0.79.0",
+    "sirv": "^3.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@tanstack/solid-virtual": "^3.13.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "dompurify": "^3.2.3",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.0",
+    "solid-js": "^1.9.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
