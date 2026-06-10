@@ -297,14 +297,26 @@ export class NodeSessionHub {
 
   private async start(): Promise<void> {
     const node = this.deps.resolveNode(this.nodeId);
-    const live =
-      node !== null &&
-      node.hostKind === 'broker' &&
-      node.status === 'active' &&
-      this.deps.viewSockExists(this.nodeId);
+    const activeBroker = node !== null && node.hostKind === 'broker' && node.status === 'active';
 
-    if (live) this.connectUpstream();
-    else await this.loadStatic();
+    if (activeBroker && this.deps.viewSockExists(this.nodeId)) {
+      this.connectUpstream();
+      return;
+    }
+
+    if (activeBroker) {
+      // Cold start: the node is live but its broker is still booting, so
+      // `view.sock` (and the session file) aren't ready yet. Connecting now
+      // would fail and loading static would dead-end on the missing session
+      // file. Instead WATCH for the socket and connect live the moment it
+      // appears — no page reload (the cold-start counterpart to the AC-21
+      // auto-resume watch). This is what makes a freshly-spawned conversation
+      // repaint and stream on its own.
+      this.startReviveWatch();
+      return;
+    }
+
+    await this.loadStatic();
   }
 
   private connectUpstream(): void {

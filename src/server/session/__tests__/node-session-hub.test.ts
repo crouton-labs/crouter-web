@@ -165,7 +165,10 @@ test('revive() transitions a dormant tab live over the same socket (no reload)',
   ];
   const deps: HubDeps = {
     createSocket: () => new LiveSocket(liveHistory) as unknown as ViewSocketClient,
-    resolveNode: () => ({ status: 'active', hostKind: 'broker' }),
+    // A genuinely dormant node is NOT active — an active node with no view.sock
+    // is cold-starting and auto-connects (see the cold-start watch in start()),
+    // so the manual-revive path is exercised by an idle node entered read-only.
+    resolveNode: () => ({ status: 'idle', hostKind: 'broker' }),
     viewSockExists: () => sockExists,
     resolveSessionFile: () => '/fake/session.jsonl',
     normalizeDormantSession: async () => ({
@@ -284,6 +287,61 @@ test('AC-21: an OPEN live hub auto-resumes live (broker_status:revived) when the
     (s) => s.source === 'broker',
   );
   assert.ok(liveSnap, 'a fresh LIVE broker snapshot was delivered over the open tab');
+
+  hub.dispose();
+});
+
+test('cold start: an active node whose broker is still booting watches for view.sock and connects live (no static dead-end, no reload)', async () => {
+  // A freshly-spawned conversation: status 'active' but the broker hasn't opened
+  // its view.sock yet. The hub must NOT dead-end on the (missing) static session
+  // file — it watches for the socket and connects live the moment it appears.
+  let sockReady = false;
+  const liveHistory = [
+    { role: 'user', content: 'whats 2+2?' },
+    { role: 'assistant', content: [{ type: 'text', text: '4' }] },
+  ];
+  let socketsMade = 0;
+  const deps: HubDeps = {
+    createSocket: (nodeId) => {
+      socketsMade += 1;
+      return new FlakySocket(nodeId, () => sockReady, liveHistory) as unknown as ViewSocketClient;
+    },
+    resolveNode: () => ({ status: 'active', hostKind: 'broker' }),
+    viewSockExists: () => sockReady,
+    // The session file isn't written yet during boot — the old code errored here.
+    resolveSessionFile: () => null,
+    normalizeDormantSession: async () => ({ history: [], model: null, thinkingLevel: 'off' }),
+    newClientId: () => 'srv-1',
+    backoff: { baseMs: 1, maxMs: 2, maxAttempts: 8 },
+  };
+
+  const hub = new NodeSessionHub('node-1', deps);
+  const msgs: WsServerMsg[] = [];
+  hub.addTab((m) => msgs.push(m));
+
+  // Boot window: no error, no static dead-end — just the watch polling.
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(
+    msgs.filter((m) => m.type === 'error'),
+    [],
+    `cold start must not surface an error; got ${JSON.stringify(msgs)}`,
+  );
+  assert.equal(
+    msgs.filter((m) => m.type === 'snapshot').length,
+    0,
+    'no premature static snapshot during boot',
+  );
+
+  // The broker finishes booting and opens its socket — the hub connects live
+  // ON ITS OWN (no client reconnect, no page reload).
+  sockReady = true;
+  await new Promise((r) => setTimeout(r, 30));
+
+  const liveSnap = (msgs.filter((m) => m.type === 'snapshot') as Array<{ source?: string; history?: unknown[] }>).find(
+    (s) => s.source === 'broker',
+  );
+  assert.ok(liveSnap, `expected a live broker snapshot once the socket appeared; got ${JSON.stringify(msgs)}`);
+  assert.equal(liveSnap!.history!.length, 2, 'live snapshot carries the broker transcript');
 
   hub.dispose();
 });
