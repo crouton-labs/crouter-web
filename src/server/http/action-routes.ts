@@ -33,6 +33,10 @@ export interface ActionRoutesDeps {
   getNode: (id: string) => NodeMeta | null;
   /** Default cwd for a spawn whose request omits one (orchestrator passes process.cwd()). */
   defaultCwd?: string;
+  /** True when the server runs inside a crtr node's environment (CRTR_NODE_ID set),
+   *  so `spawnChild` can default a parentless spawn under that node. A standalone
+   *  web server has no calling node, so a parentless web spawn becomes a root. */
+  hasCallingNode?: boolean;
 }
 
 /** Statuses with no live broker — a message to one of these wakes it (G.2). */
@@ -66,7 +70,10 @@ export function registerActionRoutes(router: RouterLike, deps: ActionRoutesDeps)
       ...(body.name ? { name: body.name } : {}),
       ...(body.model ? { model: body.model } : {}),
       ...(body.parent ? { parent: body.parent } : {}),
-      ...(body.root ? { root: true } : {}),
+      // The web server is not itself a node on the spine: with no chosen parent
+      // and no calling node, a web-initiated spawn is a top-level (resident)
+      // root — otherwise spawnChild rejects it for lacking a parent (G.1).
+      ...(body.root || (!body.parent && !deps.hasCallingNode) ? { root: true } : {}),
     };
     try {
       const result = deps.spawnChild(opts);

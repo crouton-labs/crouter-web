@@ -95,6 +95,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
     closeNode,
     getNode,
     defaultCwd: process.cwd(),
+    hasCallingNode: Boolean(process.env.CRTR_NODE_ID),
   });
 
   const staticHandler = serveStatic();
