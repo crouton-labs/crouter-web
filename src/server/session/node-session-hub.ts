@@ -374,8 +374,7 @@ export class NodeSessionHub {
     // …and, when a message finalizes, refresh chrome from pi's authoritative
     // usage (token burn, context %, cost, counts) and push a coalesced chrome
     // frame so the bar updates live without a reload (AC-16, spec F.1/F.3).
-    if (event.type === 'message_end') {
-      this.accrueChrome(event.message);
+    if (event.type === 'message_end' && this.accrueChrome(event.message)) {
       this.broadcast(this.buildChromeMsg());
     }
   }
@@ -384,14 +383,14 @@ export class NodeSessionHub {
    *  the live chrome frame and a late tab's snapshot reflect the current turn.
    *  Mirrors pi's own cumulative accounting (per-call token sums; context size
    *  is the latest call's `totalTokens`). */
-  private accrueChrome(message: AgentMessage): void {
+  private accrueChrome(message: AgentMessage): boolean {
     const s = this.stats;
-    if (!s) return;
+    if (!s) return false;
     if (message.role === 'user') {
       this.stats = { ...s, userMessages: s.userMessages + 1, totalMessages: s.totalMessages + 1 };
-      return;
+      return true;
     }
-    if (message.role !== 'assistant') return;
+    if (message.role !== 'assistant') return false;
     const am = message as AssistantMessage;
     const toolCalls = am.content.reduce((n, b) => (b.type === 'toolCall' ? n + 1 : n), 0);
     const next: SessionStats = {
@@ -410,7 +409,14 @@ export class NodeSessionHub {
         output: s.tokens.output + (usage.output ?? 0),
         cacheRead: s.tokens.cacheRead + (usage.cacheRead ?? 0),
         cacheWrite: s.tokens.cacheWrite + (usage.cacheWrite ?? 0),
-        total: s.tokens.total + ctxTokens,
+        // pi defines tokens.total as the cumulative sum of every token type,
+        // not Σ(totalTokens) — contextUsage.tokens (below) carries context size.
+        total:
+          s.tokens.total +
+          (usage.input ?? 0) +
+          (usage.output ?? 0) +
+          (usage.cacheRead ?? 0) +
+          (usage.cacheWrite ?? 0),
       };
       next.cost = s.cost + (usage.cost?.total ?? 0);
       if (win > 0) {
@@ -418,6 +424,7 @@ export class NodeSessionHub {
       }
     }
     this.stats = next;
+    return true;
   }
 
   /** Build a coalesced chrome update from the cached stats + engine state.
