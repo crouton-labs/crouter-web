@@ -7,9 +7,14 @@
  * the new node arrives via the canvas stream.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { NodeMode, NodeSummary, SpawnRequest } from '../../shared/protocol.js';
+import type {
+  NodeLifeStatus,
+  NodeMode,
+  NodeSummary,
+  SpawnRequest,
+} from '../../shared/protocol.js';
 import { RestError, spawnNode, getCanvas } from '../api/rest.js';
 import { openCanvasSocket } from '../api/canvas-socket.js';
 import type { CanvasSocket } from '../api/canvas-socket.js';
@@ -27,6 +32,7 @@ import {
 } from '@/components/ui/dialog.js';
 import { Input } from '@/components/ui/input.js';
 import { Label } from '@/components/ui/label.js';
+import { Search, X } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -60,7 +66,7 @@ function buildForest(nodes: NodeSummary[]): ForestNode[] {
 }
 
 /** Self-managing canvas store hook. Connects on mount, disposes on unmount. */
-function useCanvasStore(): { forest: ForestNode[]; generatedAt: string | null } {
+function useCanvasStore(): { nodes: NodeSummary[]; generatedAt: string | null } {
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
@@ -122,7 +128,54 @@ function useCanvasStore(): { forest: ForestNode[]; generatedAt: string | null } 
     };
   }, []);
 
-  return { forest: buildForest(nodes), generatedAt };
+  return { nodes, generatedAt };
+}
+
+// ─── filtering (§5.4) ──────────────────────────────────────────────
+
+const STATUS_OPTIONS: NodeLifeStatus[] = ['active', 'idle', 'done', 'dead', 'canceled'];
+
+interface CanvasFilter {
+  query: string;
+  status: NodeLifeStatus | 'all';
+  blockedOnly: boolean;
+}
+
+const EMPTY_FILTER: CanvasFilter = { query: '', status: 'all', blockedOnly: false };
+
+function isFilterActive(f: CanvasFilter): boolean {
+  return f.query.trim() !== '' || f.status !== 'all' || f.blockedOnly;
+}
+
+/** True iff a node matches the active filter (free-text spans name/kind/mode/cwd/id/status). */
+function matchesFilter(node: NodeSummary, f: CanvasFilter): boolean {
+  if (f.status !== 'all' && node.status !== f.status) return false;
+  if (f.blockedOnly && node.attention_count <= 0) return false;
+  const q = f.query.trim().toLowerCase();
+  if (q) {
+    const haystack = `${node.name} ${node.kind} ${node.mode} ${node.cwd} ${node.node_id} ${node.status}`.toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+  return true;
+}
+
+/**
+ * Keep every matching node plus its ancestor chain, so the forest stays a
+ * coherent tree (a deep match still renders under its parents).
+ */
+function filterNodes(nodes: NodeSummary[], f: CanvasFilter): NodeSummary[] {
+  if (!isFilterActive(f)) return nodes;
+  const byId = new Map(nodes.map((n) => [n.node_id, n]));
+  const keep = new Set<string>();
+  for (const node of nodes) {
+    if (!matchesFilter(node, f)) continue;
+    let cur: NodeSummary | undefined = node;
+    while (cur && !keep.has(cur.node_id)) {
+      keep.add(cur.node_id);
+      cur = cur.parent ? byId.get(cur.parent) : undefined;
+    }
+  }
+  return nodes.filter((n) => keep.has(n.node_id));
 }
 
 // ─── status color tokens ────────────────────────────────────────────────────
@@ -140,9 +193,13 @@ function StatusBadge({
   return (
     <Badge
       variant="outline"
-      className="font-mono text-xs"
+      className="gap-1.5 font-mono text-xs"
       style={{ color: statusColor(status, blocked), borderColor: statusColor(status, blocked) + '66' }}
     >
+      <span
+        className="size-1.5 rounded-full"
+        style={{ backgroundColor: statusColor(status, blocked) }}
+      />
       {status}
     </Badge>
   );
@@ -151,37 +208,114 @@ function StatusBadge({
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export function CanvasPage(): React.ReactElement {
-  const { forest, generatedAt } = useCanvasStore();
+  const { nodes, generatedAt } = useCanvasStore();
   const [spawnOpen, setSpawnOpen] = useState(false);
   // Bumped on each open so the dialog remounts with fresh form state (matches
   // the SolidJS <Show> remount semantics; avoids a stale prefilled prompt).
   const [spawnKey, setSpawnKey] = useState(0);
+  const [filter, setFilter] = useState<CanvasFilter>(EMPTY_FILTER);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const forest = useMemo(() => buildForest(filterNodes(nodes, filter)), [nodes, filter]);
+
+  // `/` focuses the search box (unless already typing in a field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      const typing =
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLElement && el.isContentEditable);
+      if (typing) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
-    <div className="flex flex-col gap-4 p-4 min-h-0 overflow-auto">
-      <header className="flex items-center justify-between">
-        <h1 className="text-base font-semibold">Canvas</h1>
-        <div className="flex items-center gap-3">
-          {generatedAt && (
-            <span className="text-xs text-muted-foreground">
-              updated {fmtTime(generatedAt)}
-            </span>
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
+        <h1 className="text-sm font-semibold">Canvas</h1>
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            ref={searchRef}
+            value={filter.query}
+            onChange={(e) => setFilter((f) => ({ ...f, query: e.currentTarget.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFilter((f) => ({ ...f, query: '' }));
+                e.currentTarget.blur();
+              }
+            }}
+            placeholder="Search name, kind, mode, cwd, id…  (press /)"
+            aria-label="Search nodes"
+            className="h-8 pl-7 pr-7 font-mono text-xs"
+          />
+          {filter.query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setFilter((f) => ({ ...f, query: '' }))}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
           )}
-          <Button size="sm" onClick={() => { setSpawnKey((k) => k + 1); setSpawnOpen(true); }}>
-            Spawn a node
-          </Button>
         </div>
+        <Select
+          value={filter.status}
+          onValueChange={(v) =>
+            setFilter((f) => ({ ...f, status: v as NodeLifeStatus | 'all' }))
+          }
+        >
+          <SelectTrigger size="sm" className="h-8 w-[8.5rem] font-mono text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">all statuses</SelectItem>
+            {STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground select-none">
+          <input
+            type="checkbox"
+            checked={filter.blockedOnly}
+            onChange={(e) => setFilter((f) => ({ ...f, blockedOnly: e.currentTarget.checked }))}
+            className="size-3.5 rounded border border-input accent-primary"
+          />
+          blocked
+        </label>
+        {generatedAt && (
+          <span className="font-mono text-[0.7rem] text-muted-foreground/70">
+            {fmtTime(generatedAt)}
+          </span>
+        )}
+        <Button size="sm" className="h-8" onClick={() => { setSpawnKey((k) => k + 1); setSpawnOpen(true); }}>
+          Spawn a node
+        </Button>
       </header>
 
-      {forest.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">No nodes on the canvas yet.</p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {forest.map((fn) => (
-            <ForestRow key={fn.node.node_id} node={fn} depth={0} />
-          ))}
-        </ul>
-      )}
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        {nodes.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No nodes on the canvas yet.</p>
+        ) : forest.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No matching nodes.</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {forest.map((fn) => (
+              <ForestRow key={fn.node.node_id} node={fn} depth={0} />
+            ))}
+          </ul>
+        )}
+      </div>
 
       <SpawnDialog key={spawnKey} open={spawnOpen} onClose={() => setSpawnOpen(false)} />
     </div>
