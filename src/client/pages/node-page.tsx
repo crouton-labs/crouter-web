@@ -20,6 +20,7 @@ import { useSessionStore, type SessionStore } from '../store/session-store.js';
 import { TitleBar, ChromePanel } from '../chrome/chrome-bar.js';
 import { Presence } from '../chrome/presence.js';
 import { useTerm, useGrants, useCapability, useProfile } from '../profile/provider.js';
+import { shouldResnapshot, resnapshotDelay } from '../lib/session-resnapshot.js';
 import { Slot, Can, actionsFor, type SlotRegistry } from '../profile/slots.js';
 import { cn } from '@/lib/utils.js';
 import { CommandPalette } from '../command-palette/palette.js';
@@ -106,10 +107,45 @@ export function NodePage(props: { id: string }) {
     void loadCommands();
   }, [props.id, loadCommands]);
 
+  // Cold-start re-snapshot (consumer first-impression fix). A node spawned via
+  // "+ New chat" and entered before its broker finishes booting is served a
+  // static snapshot the hub never upgrades on its own. While the node is
+  // actually live (status 'active') but our stream is stuck on that static
+  // snapshot, reconnect with backoff: a fresh server-side hub re-runs its
+  // live-vs-static check and lands the live snapshot once the broker's socket
+  // is up — the same effect as a manual page reload, no protocol change. A
+  // genuinely-dormant node (idle/done/…) never qualifies, so the explicit
+  // Revive path and AC-21 auto-resume are untouched.
+  const resnapshotRef = useRef(0);
+  useEffect(() => {
+    resnapshotRef.current = 0; // re-arm per node
+  }, [props.id]);
+  useEffect(() => {
+    if (
+      !shouldResnapshot({
+        dormant,
+        status: detail?.status,
+        socketReady: store.socketReady,
+        attempt: resnapshotRef.current,
+      })
+    )
+      return;
+    const attempt = resnapshotRef.current;
+    resnapshotRef.current += 1;
+    const timer = setTimeout(() => store.reconnect(), resnapshotDelay(attempt));
+    return () => clearTimeout(timer);
+  }, [dormant, detail?.status, store.socketReady, store.reconnect]);
+
   // Studio holds its own conversation: with no manual arbitration UI, auto-grab
   // the controller slot once the socket is open (design §4.3). Operator keeps
   // the explicit request/release affordance, so this is skipped there.
   const autoControlRef = useRef<string | null>(null);
+  // Re-arm the auto-grab whenever the socket drops/reconnects: a reconnect (the
+  // cold-start re-snapshot above, or a server-restart) lands a FRESH hub whose
+  // arbiter has no controller for this tab, so we must request control again.
+  useEffect(() => {
+    if (!store.socketReady) autoControlRef.current = null;
+  }, [store.socketReady]);
   useEffect(() => {
     if (showArbitration || dormant) return;
     if (!store.socketReady || !brokerUp) return;

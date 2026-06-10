@@ -69,6 +69,12 @@ export interface SessionStore {
   socketReady: boolean;
   /** Last surfaced WS error, for transient UI; cleared on next snapshot. */
   error: { code: string; message: string } | null;
+  /** Tear down and re-open the session socket from scratch. The server
+   *  disposes the old per-node hub when our last tab closes and a fresh hub
+   *  re-runs its live-vs-static check on the new connection — the same effect
+   *  as a page reload. Used to escape a cold-start static snapshot once the
+   *  freshly-spawned node's broker is up (see node-page). */
+  reconnect: () => void;
   // --- send wrappers (controller-only frames gated server-side) ---
   prompt: (text: string, images?: ImageContent[]) => void;
   steer: (text: string, images?: ImageContent[]) => void;
@@ -95,6 +101,9 @@ export function useSessionStore(nodeId: string): SessionStore {
   const [serverConnected, setServerConnected] = useState(true);
   const [socketReady, setSocketReady] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  // Bumped by `reconnect()` to force the connect effect to tear down and
+  // re-open the socket (a fresh server-side hub).
+  const [generation, setGeneration] = useState(0);
 
   const socketRef = useRef<SessionSocket | null>(null);
 
@@ -186,7 +195,9 @@ export function useSessionStore(nodeId: string): SessionStore {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [nodeId]);
+  }, [nodeId, generation]);
+
+  const reconnect = useCallback(() => setGeneration((g) => g + 1), []);
 
   const prompt = useCallback((text: string, images?: ImageContent[]) => {
     socketRef.current?.send({ type: 'prompt', text, ...(images ? { images } : {}) });
@@ -241,6 +252,7 @@ export function useSessionStore(nodeId: string): SessionStore {
     serverConnected,
     socketReady,
     error,
+    reconnect,
     prompt,
     steer,
     abort,
