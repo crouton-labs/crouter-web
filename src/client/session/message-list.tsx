@@ -102,7 +102,14 @@ export function MessageList(props: MessageListProps): JSX.Element {
             <div
               class="cw-row"
               data-index={vi.index}
-              ref={(el) => virtualizer.measureElement(el)}
+              ref={(el) => {
+                // virtual-core reads `data-index` off the node (its dynamic-
+                // measure ResizeObserver warns + discards a measurement when it
+                // is absent). Solid can run this ref before committing the JSX
+                // attribute, so set it imperatively first, then measure.
+                el.setAttribute('data-index', String(vi.index));
+                virtualizer.measureElement(el);
+              }}
               style={{
                 position: 'absolute',
                 top: 0,

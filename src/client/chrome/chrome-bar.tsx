@@ -73,7 +73,7 @@ export function ChromeBar(props: {
           {(ctx) => (
             <span class="chrome-field">
               <span class="chrome-label">context</span> {ctx().tokens.toLocaleString()}
-              <Show when={!dormant()}> / {ctx().window.toLocaleString()} ({ctx().percent}%)</Show>
+              <Show when={!dormant()}> / {ctx().window.toLocaleString()} ({fmtPercent(ctx().percent)}%)</Show>
             </span>
           )}
         </Show>
@@ -95,4 +95,10 @@ export function ChromeBar(props: {
       </div>
     </div>
   );
+}
+
+/** Trim float noise from a context-usage percent (e.g. 0.87399999 → 0.874),
+ *  keeping enough precision for sub-1% windows. */
+function fmtPercent(percent: number): string {
+  return String(Math.round(percent * 1000) / 1000);
 }
