@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppRoutes, ReconnectingBanner } from "./app-routes.js";
 import { ProfileProvider } from "./profile/provider.js";
 import { AppShell } from "./shell/app-shell.js";
+import { Toaster } from "./shell/toaster.js";
 
 export function App() {
   return (
@@ -16,6 +17,7 @@ export function App() {
           <AppShell>
             <AppRoutes />
           </AppShell>
+          <Toaster />
         </TooltipProvider>
       </BrowserRouter>
     </ProfileProvider>

@@ -8,6 +8,7 @@
 import { NavLink } from 'react-router-dom';
 import type { NavItem } from '../profile/types.js';
 import { cn } from '@/lib/utils.js';
+import { useInboxCount } from '../lib/use-decks.js';
 
 export function Sidebar({ nav }: { nav: NavItem[] }) {
   return (
@@ -22,16 +23,29 @@ export function Sidebar({ nav }: { nav: NavItem[] }) {
           end={item.path === '/'}
           className={({ isActive }) =>
             cn(
-              'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors',
               isActive
                 ? 'bg-primary/10 text-primary'
                 : 'text-foreground/70 hover:bg-accent hover:text-foreground',
             )
           }
         >
-          {item.label}
+          <span>{item.label}</span>
+          {item.id === 'inbox' && <NavInboxBadge />}
         </NavLink>
       ))}
     </nav>
+  );
+}
+
+/** The pending-ask count badge for the Inbox nav entry. Absent when zero
+ *  (design §4.1 — the badge disappears at inbox-zero, never shows ‘0’). */
+export function NavInboxBadge() {
+  const count = useInboxCount();
+  if (count <= 0) return null;
+  return (
+    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+      {count}
+    </span>
   );
 }

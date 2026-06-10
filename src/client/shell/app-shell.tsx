@@ -9,10 +9,11 @@
  */
 
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useProfile } from '../profile/provider.js';
-import { Sidebar } from './sidebar.js';
+import { Sidebar, NavInboxBadge } from './sidebar.js';
 import { ProfileSwitcher } from './profile-switcher.js';
+import { cn } from '@/lib/utils.js';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const profile = useProfile();
@@ -24,9 +25,36 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-border bg-card/40 px-3">
-        <Link to={home} className="text-sm font-semibold tracking-tight text-foreground">
-          crouter
-        </Link>
+        <div className="flex min-w-0 items-center gap-4">
+          <Link to={home} className="text-sm font-semibold tracking-tight text-foreground">
+            crouter
+          </Link>
+          {/* A compact-density profile (Operator) has no sidebar, so the nav
+              manifest renders inline in the header here. A comfortable one
+              (Studio) gets the left Sidebar below and skips this. */}
+          {!sidebarLayout && (
+            <nav aria-label="Primary" className="flex items-center gap-1">
+              {profile.nav.map((item) => (
+                <NavLink
+                  key={item.id}
+                  to={item.path}
+                  end={item.path === '/'}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground/60 hover:bg-accent hover:text-foreground',
+                    )
+                  }
+                >
+                  <span>{item.label}</span>
+                  {item.id === 'inbox' && <NavInboxBadge />}
+                </NavLink>
+              ))}
+            </nav>
+          )}
+        </div>
         <ProfileSwitcher />
       </header>
 

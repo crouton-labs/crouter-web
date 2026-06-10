@@ -10,6 +10,8 @@ import { Routes, Route, useParams } from "react-router-dom";
 import { CanvasPage } from "./pages/canvas-page.js";
 import { ConversationsPage } from "./pages/conversations-page.js";
 import { NodePage } from "./pages/node-page.js";
+import { InboxPage } from "./pages/inbox-page.js";
+import { DeckPage } from "./pages/deck-page.js";
 import { SettingsPage } from "./pages/settings-page.js";
 import { useCapability } from "./profile/provider.js";
 import { useServerStatus } from "./lib/server-status.js";
@@ -17,6 +19,11 @@ import { useServerStatus } from "./lib/server-status.js";
 function NodePageRoute() {
   const { id } = useParams<{ id: string }>();
   return <NodePage id={id ?? ""} />;
+}
+
+function DeckPageRoute() {
+  const { deckId } = useParams<{ deckId: string }>();
+  return <DeckPage deckId={deckId ?? ""} />;
 }
 
 /** `/` resolves to the profile's home: the Canvas for an audience that can view
@@ -32,6 +39,8 @@ export function AppRoutes() {
       <Route path="/" element={<HomeRoute />} />
       <Route path="/nodes/:id" element={<NodePageRoute />} />
       <Route path="/c/:id" element={<NodePageRoute />} />
+      <Route path="/inbox" element={<InboxPage />} />
+      <Route path="/inbox/:deckId" element={<DeckPageRoute />} />
       <Route path="/settings" element={<SettingsPage />} />
       {/* Unknown URLs fall back to the profile home. */}
       <Route path="*" element={<HomeRoute />} />

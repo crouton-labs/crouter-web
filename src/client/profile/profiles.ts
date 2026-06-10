@@ -55,6 +55,7 @@ const operator: Profile = {
   },
   nav: [
     { id: 'canvas', label: 'Canvas', path: '/' },
+    { id: 'inbox', label: 'Inbox', path: '/inbox' },
   ],
   density: 'compact',
   defaultTheme: 'dark',
@@ -83,11 +84,11 @@ const studio: Profile = {
     compact: '',
     close: '',
   },
-  // Phase 2 ships Conversations + Settings only. Inbox (Phase 3) and Views
-  // (Phase 4) are added back to this manifest when those screens land — no
-  // dead nav links or stub pages in the meantime (design §8).
+  // Conversations + Inbox (Phase 3) + Settings. Views (Phase 4) joins this
+  // manifest when that screen lands — no dead nav links in the meantime (design §8).
   nav: [
     { id: 'conversations', label: 'Conversations', path: '/' },
+    { id: 'inbox', label: 'Inbox', path: '/inbox' },
     { id: 'settings', label: 'Settings', path: '/settings' },
   ],
   density: 'comfortable',

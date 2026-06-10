@@ -27,6 +27,7 @@ import { CommandPalette } from '../command-palette/palette.js';
 import { ExtensionDialog } from '../dialogs/extension-dialog.js';
 import { MessageList } from '../session/message-list.js';
 import { ActivityRail } from '../session/activity-rail.js';
+import { InlineAsks } from '../session/inline-asks.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
 import {
@@ -306,6 +307,11 @@ export function NodePage(props: { id: string }) {
           {showInternals ? actionError : 'Something went wrong — please try again.'}
         </div>
       )}
+
+      {/* Asks raised anywhere in this conversation's sub-DAG, inline (design
+          §4.3/§5.1) — tagged by conversation, resolved here for simple kinds or
+          deep-linked into the Inbox for complex ones. Capability-neutral. */}
+      <InlineAsks conversationId={props.id} />
 
       <main className="min-h-0 flex-1 overflow-auto">
         <Slot reg={slots} name="stream" />

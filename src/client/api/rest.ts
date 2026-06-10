@@ -11,11 +11,17 @@ import type {
   CloseResponse,
   Command,
   CommandsResponse,
+  DeckDetail,
+  DeckDetailResponse,
+  DecksResponse,
+  DeckSummary,
   ErrorEnvelope,
   MessageRequest,
   MessageResponse,
   NodeDetail,
   NodeDetailResponse,
+  ResolveDeckRequest,
+  ResolveDeckResponse,
   ReviveRequest,
   ReviveResponse,
   RestErrorCode,
@@ -102,4 +108,24 @@ export function reviveNode(id: string, req: ReviveRequest = {}): Promise<ReviveR
 /** `POST /api/nodes/:id/close` — pause the node without finishing it. */
 export function closeNode(id: string): Promise<CloseResponse> {
   return postJson<CloseResponse>(`/api/nodes/${encodeURIComponent(id)}/close`);
+}
+
+/** `GET /api/decks` — pending asks across the canvas (unwraps `{decks}`). */
+export async function getDecks(): Promise<DeckSummary[]> {
+  const body = await getJson<DecksResponse>('/api/decks');
+  return body.decks;
+}
+
+/** `GET /api/decks/:id` — the full deck for a resolution flow (unwraps `{deck}`). */
+export async function getDeck(id: string): Promise<DeckDetail> {
+  const body = await getJson<DeckDetailResponse>(`/api/decks/${encodeURIComponent(id)}`);
+  return body.deck;
+}
+
+/** `POST /api/decks/:id/resolve` — write the human's answer back. */
+export function resolveDeck(
+  id: string,
+  req: ResolveDeckRequest,
+): Promise<ResolveDeckResponse> {
+  return postJson<ResolveDeckResponse>(`/api/decks/${encodeURIComponent(id)}/resolve`, req);
 }
