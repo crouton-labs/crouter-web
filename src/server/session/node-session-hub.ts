@@ -141,11 +141,18 @@ export class NodeSessionHub {
    *  flag makes the trailing `close` a no-op so a dormant node never flaps a
    *  `down`/`reconnecting` storm (§7 — never fabricate a live session). */
   private wentDormant = false;
-  /** True while a server-side revive is bringing a dormant hub live (AC-18).
-   *  Drives the boot-poll for the new broker's `view.sock` and makes the first
-   *  `welcome` emit `broker_status:'revived'` even though we never connected
-   *  before — the open tab transitions dormant→live with no page reload. */
+  /** True while a server-side revive is bringing a dormant hub live (AC-18),
+   *  OR while an open live hub whose broker died is auto-watching for the
+   *  daemon to re-create `view.sock` (AC-21). Drives the boot-poll for the
+   *  broker's `view.sock`; the first `welcome` then emits
+   *  `broker_status:'revived'` and the open tab transitions to live with no
+   *  page reload. */
   private reviving = false;
+  /** Distinguishes the two revive flavors. A manual `revive()` is BOUNDED — it
+   *  surfaces an error if the broker never comes online within the boot window.
+   *  The AC-21 auto-resume watch is UNBOUNDED — it keeps polling (capped delay)
+   *  while ≥1 tab is open, per §7 "retry … while at least one tab is open". */
+  private reviveBounded = true;
 
   constructor(
     readonly nodeId: string,
@@ -220,7 +227,26 @@ export class NodeSessionHub {
     if (this.disposed || this.tabs.size === 0) return;
     if (this.everConnected && this.upstream) return; // already live
     this.reviving = true;
+    this.reviveBounded = true;
     this.wentDormant = false;
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.tryReviveConnect();
+  }
+
+  /** AC-21 auto-resume: a live hub whose broker died has exhausted its bounded
+   *  live-reconnect and fallen back to the static snapshot (frozen history +
+   *  Revive). Keep watching — unbounded while ≥1 tab is open — for the daemon to
+   *  re-create the broker's `view.sock`; the moment it reappears, reconnect over
+   *  the OPEN tabs and emit `broker_status:'revived'` (no manual Revive, no page
+   *  reload). The static snapshot keeps the view usable meanwhile (§7). */
+  private startReviveWatch(): void {
+    if (this.disposed || this.tabs.size === 0) return;
+    this.reviving = true;
+    this.reviveBounded = false;
     this.reconnectAttempts = 0;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -243,9 +269,16 @@ export class NodeSessionHub {
 
   private scheduleReviveRetry(): void {
     if (this.disposed || this.reconnectTimer || !this.reviving) return;
-    if (this.reconnectAttempts >= this.backoff.maxAttempts) {
-      // The broker never came online within the boot window — stop polling and
-      // surface the failure; the tab stays on its read-only dormant snapshot.
+    if (this.tabs.size === 0) {
+      // No open tab to resume — stop watching (the next entry connects live).
+      this.reviving = false;
+      return;
+    }
+    if (this.reviveBounded && this.reconnectAttempts >= this.backoff.maxAttempts) {
+      // Manual revive: the broker never came online within the boot window —
+      // stop polling and surface the failure; the tab stays on its read-only
+      // dormant snapshot. (The AC-21 auto-resume watch is unbounded and never
+      // takes this branch — it keeps polling while a tab is open.)
       this.reviving = false;
       this.broadcast({
         type: 'error',
@@ -543,9 +576,10 @@ export class NodeSessionHub {
       return;
     }
     this.upstream = null;
-    if (this.reviving && !this.everConnected) {
-      // The socket closed before the revived broker handed us a welcome — keep
-      // polling for it rather than flapping `down`/reconnect.
+    if (this.reviving) {
+      // The socket closed before a (re)connecting broker handed us a welcome —
+      // keep polling for it (manual revive OR AC-21 auto-resume watch) rather
+      // than flapping `down`/reconnect.
       this.scheduleReviveRetry();
       return;
     }
@@ -556,8 +590,11 @@ export class NodeSessionHub {
   private scheduleReconnect(): void {
     if (this.disposed || this.reconnectTimer) return;
     if (this.reconnectAttempts >= this.backoff.maxAttempts) {
-      // Give up live retries — fall back to a static snapshot + Revive (§7).
+      // Bounded live-reconnect exhausted — fall back to a static snapshot +
+      // Revive (§7), but keep an UNBOUNDED watch for the daemon to auto-revive
+      // the broker so an OPEN view resumes live on its own (AC-21).
       void this.loadStatic();
+      this.startReviveWatch();
       return;
     }
     const delay = Math.min(this.backoff.maxMs, this.backoff.baseMs * 2 ** this.reconnectAttempts);

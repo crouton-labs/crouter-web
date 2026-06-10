@@ -63,6 +63,55 @@ class LiveSocket extends EventEmitter {
   close(): void {}
 }
 
+/** A socket whose liveness is decided at `connect()`-time by an external flag,
+ *  so a single factory can model a broker that dies and is later auto-revived.
+ *  Live ⇒ handshake + `welcome`; dead ⇒ `error(BrokerUnavailableError)`+`close`
+ *  (a stale/absent `view.sock`). The test keeps the instance to kill it later. */
+class FlakySocket extends EventEmitter {
+  constructor(
+    private readonly nodeId: string,
+    private readonly isUp: () => boolean,
+    private readonly history: unknown[],
+  ) {
+    super();
+  }
+  connect(): void {
+    if (this.isUp()) {
+      setImmediate(() => this.emit('connect'));
+    } else {
+      setImmediate(() => {
+        this.emit('error', new BrokerUnavailableError(this.nodeId));
+        this.emit('close');
+      });
+    }
+  }
+  send(frame: { type: string }): void {
+    if (frame.type === 'hello' && this.isUp()) {
+      setImmediate(() =>
+        this.emit('frame', {
+          type: 'welcome',
+          controller_id: null,
+          snapshot: {
+            messages: this.history,
+            stats: {
+              sessionId: 'node-1',
+              userMessages: 1,
+              assistantMessages: 1,
+              toolCalls: 0,
+              toolResults: 0,
+              totalMessages: this.history.length,
+              tokens: { input: 3, output: 4, cacheRead: 0, cacheWrite: 0, total: 7 },
+              cost: 0,
+            },
+            state: {},
+          },
+        }),
+      );
+    }
+  }
+  close(): void {}
+}
+
 function tick(): Promise<void> {
   return new Promise((r) => setImmediate(r));
 }
@@ -158,6 +207,83 @@ test('revive() transitions a dormant tab live over the same socket (no reload)',
     2,
     'live snapshot replaces dormant history from the broker (no dup/loss)',
   );
+
+  hub.dispose();
+});
+
+test('AC-21: an OPEN live hub auto-resumes live (broker_status:revived) when the daemon re-creates view.sock after a broker crash', async () => {
+  // A single flaky factory: the broker is up at entry, killed mid-view, then
+  // auto-revived by the daemon. `sockPresent` mirrors `view.sock` existence.
+  let brokerUp = true;
+  let sockPresent = true;
+  const sockets: FlakySocket[] = [];
+  const liveHistory = [
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: [{ type: 'text', text: 'live' }] },
+  ];
+  const deps: HubDeps = {
+    createSocket: (nodeId) => {
+      const s = new FlakySocket(nodeId, () => brokerUp, liveHistory);
+      sockets.push(s);
+      return s as unknown as ViewSocketClient;
+    },
+    resolveNode: () => ({ status: 'active', hostKind: 'broker' }),
+    viewSockExists: () => sockPresent,
+    resolveSessionFile: () => '/fake/session.jsonl',
+    normalizeDormantSession: async () => ({
+      history: [{ role: 'user', content: 'hi' } as never],
+      model: 'gpt-x',
+      thinkingLevel: 'off',
+    }),
+    newClientId: () => 'srv-1',
+    // Tiny backoff with a low attempt cap so the bounded live-reconnect exhausts
+    // fast and we exercise the post-give-up auto-resume watch.
+    backoff: { baseMs: 1, maxMs: 2, maxAttempts: 3 },
+  };
+
+  const hub = new NodeSessionHub('node-1', deps);
+  const msgs: WsServerMsg[] = [];
+  hub.addTab((m) => msgs.push(m));
+
+  // 1) Live entry over the open tab.
+  await new Promise((r) => setTimeout(r, 20));
+  const firstSnap = msgs.find((m) => m.type === 'snapshot') as { source?: string } | undefined;
+  assert.equal(firstSnap?.source, 'broker', 'entered live');
+
+  // 2) Broker crashes mid-view: kill the live socket + drop its view.sock.
+  brokerUp = false;
+  sockPresent = false;
+  sockets[0]!.emit('close');
+
+  // Bounded live-reconnect runs and exhausts → down + static fallback.
+  await new Promise((r) => setTimeout(r, 60));
+  assert.ok(
+    msgs.some((m) => m.type === 'broker_status' && (m as { state: string }).state === 'down'),
+    'broker down was broadcast',
+  );
+  assert.ok(
+    (msgs.filter((m) => m.type === 'snapshot') as Array<{ source?: string }>).some(
+      (s) => s.source === 'static',
+    ),
+    'fell back to a static snapshot while the broker is down',
+  );
+  const beforeRevive = msgs.length;
+
+  // 3) The daemon auto-revives the broker — NO manual revive() call. The OPEN
+  //    hub must detect the reappeared view.sock on its own and resume live.
+  brokerUp = true;
+  sockPresent = true;
+  await new Promise((r) => setTimeout(r, 60));
+
+  const after = msgs.slice(beforeRevive);
+  assert.ok(
+    after.some((m) => m.type === 'broker_status' && (m as { state: string }).state === 'revived'),
+    `open view must auto-resume with broker_status:'revived'; got ${JSON.stringify(after)}`,
+  );
+  const liveSnap = (after.filter((m) => m.type === 'snapshot') as Array<{ source?: string }>).find(
+    (s) => s.source === 'broker',
+  );
+  assert.ok(liveSnap, 'a fresh LIVE broker snapshot was delivered over the open tab');
 
   hub.dispose();
 });

@@ -45,6 +45,15 @@ export function upgrade(
   const m = SESSION_RE.exec(pathname);
   if (m) {
     const nodeId = decodeURIComponent(m[1]!);
+    // Reject the session-WS for a non-enterable node at the API boundary (§7,
+    // AC-5): a tmux-hosted (or unknown) node has no broker socket to drive, so
+    // we never open a hub/tab and serve a misleading static "session" — mirror
+    // the REST `…/commands` 409. Only `host_kind === 'broker'` is enterable.
+    if (deps.hubRegistry.hostKind(nodeId) !== "broker") {
+      socket.write("HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     sessionWss.handleUpgrade(req, socket, head, (ws) => {
       attachSessionWs(ws, nodeId, deps.hubRegistry);
     });

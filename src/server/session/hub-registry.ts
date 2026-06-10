@@ -82,6 +82,16 @@ export class HubRegistry {
     return this.hubs.has(nodeId);
   }
 
+  /** The node's host kind (`broker` | `tmux` | `null`), via the injected
+   *  resolver. The session-WS upgrade boundary uses it to REJECT a
+   *  non-enterable (tmux-hosted or unknown) node before a hub/tab is ever
+   *  created — §7 "entering a non-enterable (tmux) node … rejected at the API
+   *  boundary" (AC-5). A tmux node has no broker socket to drive, so the static
+   *  read the hub would otherwise serve is not a valid session view. */
+  hostKind(nodeId: string): 'tmux' | 'broker' | null {
+    return this.deps.resolveNode(nodeId)?.hostKind ?? null;
+  }
+
   /** Tear every hub down (graceful server shutdown — `bye` each upstream). */
   disposeAll(): void {
     for (const hub of this.hubs.values()) hub.dispose();
