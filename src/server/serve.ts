@@ -25,8 +25,18 @@ import {
 import { CanvasWatcher } from "./canvas/canvas-watcher.js";
 import { ChromeAssembler } from "./canvas/chrome-assembler.js";
 import { GitBranchCache } from "./canvas/git-branch-cache.js";
+import { DeckStore } from "./decks/deck-store.js";
+import {
+  scanInbox,
+  readJson,
+  deckPath,
+  writeResponse,
+  isResolved,
+  isClaimed,
+} from "./decks/humanloop-lib.js";
 import { registerActionRoutes } from "./http/action-routes.js";
 import { registerCanvasRoutes } from "./http/canvas-routes.js";
+import { registerDeckRoutes } from "./http/deck-routes.js";
 import { Router, sendError } from "./http/router.js";
 import { serveStatic } from "./http/static.js";
 import { HubRegistry } from "./session/hub-registry.js";
@@ -81,6 +91,24 @@ export async function serve(opts: ServeOpts): Promise<void> {
   const watcher = new CanvasWatcher({ listNodes, asksAcrossCanvas });
   watcher.start();
 
+  // Deck read+resolve layer (design §5.2). Reads pending humanloop decks across
+  // the canvas and writes answers back through humanloop's file convention.
+  const deckStore = new DeckStore({
+    listNodes: () =>
+      listNodes().map((n) => ({
+        node_id: n.node_id,
+        name: n.name,
+        cwd: n.cwd,
+        parent: n.parent ?? null,
+      })),
+    scanInbox: (roots) => scanInbox(roots),
+    readDeck: (dir) => readJson(deckPath(dir)),
+    isResolved,
+    isClaimed,
+    writeResponse: (dir, responses, completedAt) =>
+      writeResponse(dir, responses, completedAt),
+  });
+
   // --- REST router (matched first; SPA fallback otherwise) ---
   const router = new Router();
   registerCanvasRoutes(router, {
@@ -88,6 +116,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
     assembler,
     getCommandsFor: (id) => hubRegistry.getCommands(id),
   });
+  registerDeckRoutes(router, { store: deckStore });
   registerActionRoutes(router, {
     spawnChild,
     appendInbox,

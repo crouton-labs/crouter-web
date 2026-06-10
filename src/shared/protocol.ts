@@ -141,7 +141,10 @@ export type RestErrorCode =
   | 'spawn_failed'
   | 'revive_failed'
   | 'close_failed'
-  | 'message_failed';
+  | 'message_failed'
+  | 'deck_not_found'
+  | 'deck_already_resolved'
+  | 'resolve_failed';
 
 /** Structured failure envelope for REST actions and reads. */
 export interface ErrorEnvelope {
@@ -215,6 +218,101 @@ export interface MessageRequest {
 /** `POST /api/nodes/:id/revive` body. */
 export interface ReviveRequest {
   fresh?: boolean;
+}
+
+// ===========================================================================
+// Inbox — humanloop decks (design §1, §5.2, §5.6)
+// ===========================================================================
+
+/**
+ * The five resolution flows (design §5.2). humanloop's `InteractionKind` also
+ * has `review`; the server normalizes it (and any unknown/absent kind) onto one
+ * of these five so a deck always renders through a known flow.
+ */
+export type DeckKind = 'notify' | 'validation' | 'decision' | 'context' | 'error';
+
+/** One option of a decision/validation interaction (humanloop InteractionOption). */
+export interface DeckOption {
+  id: string;
+  label: string;
+  /** The option's consequence/explanation (humanloop `description`). */
+  description?: string;
+}
+
+/** One interaction within a deck (humanloop Interaction, normalized for the web). */
+export interface DeckInteraction {
+  id: string;
+  title: string;
+  subtitle?: string;
+  /** Markdown body (bodyPath already inlined by the server). */
+  body?: string;
+  kind: DeckKind;
+  options: DeckOption[];
+  multiSelect: boolean;
+  allowFreetext: boolean;
+  freetextLabel?: string;
+}
+
+/**
+ * A pending ask, ranked in the inbox list (design §5.2). Provenance carries
+ * BOTH the consumer-facing conversation (Studio renders this, never the node id)
+ * and the raw asking node (Operator renders this, gated on `node.internals`).
+ */
+export interface DeckSummary {
+  /** Opaque, stable id (base64url of the interaction dir). */
+  id: string;
+  /** The first interaction's kind — the glyph + flow for the row. */
+  kind: DeckKind;
+  title: string;
+  subtitle?: string;
+  /** ISO-8601 — when the ask started blocking (drives the wait duration + rank). */
+  blocked_since: string;
+  /** The conversation (spine root) this ask belongs to — Studio provenance. */
+  conversation_id: string;
+  conversation_title: string;
+  /** The node that raised the ask — Operator provenance (node-id display gated). */
+  asking_node_id: string;
+  asking_node_name: string;
+  /** The asking node's cwd — Operator sub-DAG scoping. */
+  cwd: string;
+  /** How many interactions the deck holds (a multi-question deck). */
+  interaction_count: number;
+}
+
+/** The full deck for a resolution flow (`GET /api/decks/:id`). */
+export interface DeckDetail extends DeckSummary {
+  interactions: DeckInteraction[];
+}
+
+/** `GET /api/decks` body. */
+export interface DecksResponse {
+  decks: DeckSummary[];
+  /** ISO-8601. */
+  generated_at: string;
+}
+
+/** `GET /api/decks/:id` body. */
+export interface DeckDetailResponse {
+  deck: DeckDetail;
+}
+
+/** One interaction's answer (humanloop InteractionResponse). */
+export interface DeckAnswer {
+  id: string;
+  selectedOptionId?: string;
+  selectedOptionIds?: string[];
+  freetext?: string;
+  optionComments?: Record<string, string>;
+}
+
+/** `POST /api/decks/:id/resolve` body. */
+export interface ResolveDeckRequest {
+  responses: DeckAnswer[];
+}
+
+/** `POST /api/decks/:id/resolve` success. */
+export interface ResolveDeckResponse {
+  ok: true;
 }
 
 // ===========================================================================
