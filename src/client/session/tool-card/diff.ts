@@ -9,11 +9,25 @@ export interface DiffLine {
   text: string;
 }
 
+/** Cap on the LCS matrix (`(n+1)×(m+1)` cells). Edit/write hunks are normally
+ *  small; a pathological huge hunk (e.g. a 3000-line replace) would allocate
+ *  ~9M cells and jank/OOM the tab, so above this we fall back to a plain
+ *  remove-all-then-add-all rendering instead of computing the LCS. */
+const MAX_LCS_CELLS = 1_000_000;
+
 export function lineDiff(oldStr: string, newStr: string): DiffLine[] {
   const a = (oldStr ?? '').split('\n');
   const b = (newStr ?? '').split('\n');
   const n = a.length;
   const m = b.length;
+
+  // Guard the quadratic LCS: on an oversized hunk, render a plain before/after.
+  if ((n + 1) * (m + 1) > MAX_LCS_CELLS) {
+    const out: DiffLine[] = [];
+    for (const text of a) out.push({ kind: 'del', text });
+    for (const text of b) out.push({ kind: 'add', text });
+    return out;
+  }
 
   // LCS length table.
   const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));

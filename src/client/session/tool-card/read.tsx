@@ -7,7 +7,7 @@
  */
 
 import { Show, type JSX } from 'solid-js';
-import { renderMarkdown } from '../../render/markdown.js';
+import { renderCodeBlock } from '../../render/markdown.js';
 import { ToolCardShell, ResultImages, resultText, callSubtitle, type ToolCardProps } from './parts.js';
 
 const EXT_LANG: Record<string, string> = {
@@ -30,8 +30,7 @@ export function ReadCard(props: ToolCardProps): JSX.Element {
   const html = (): string => {
     const b = body();
     if (!b) return '';
-    const lang = langFor(path());
-    return renderMarkdown('```' + lang + '\n' + b + '\n```');
+    return renderCodeBlock(b, langFor(path()));
   };
   return (
     <ToolCardShell call={props.call} inProgress={props.inProgress} isError={props.isError}>

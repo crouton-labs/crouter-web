@@ -7,7 +7,7 @@
  */
 
 import { Show, type JSX } from 'solid-js';
-import { renderMarkdown } from '../../render/markdown.js';
+import { renderCodeBlock } from '../../render/markdown.js';
 import { escapeText } from '../../render/sanitize.js';
 import { ToolCardShell, ResultImages, resultText, callSubtitle, type ToolCardProps } from './parts.js';
 
@@ -31,7 +31,7 @@ export function WriteCard(props: ToolCardProps): JSX.Element {
     if (!c) return '';
     const m = /\.([a-z0-9]+)$/i.exec(path());
     const lang = (m && EXT_LANG[m[1].toLowerCase()]) || '';
-    return renderMarkdown('```' + lang + '\n' + c + '\n```');
+    return renderCodeBlock(c, lang);
   };
   return (
     <ToolCardShell call={props.call} subtitle={path()} inProgress={props.inProgress} isError={props.isError}>

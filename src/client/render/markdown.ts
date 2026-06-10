@@ -105,6 +105,21 @@ export function renderMarkdown(src: string): string {
   return sanitizeHtml(md.render(src ?? ''));
 }
 
+/**
+ * Render a code body as a single highlighted, SANITIZED `<pre><code>` block,
+ * WITHOUT round-tripping through a markdown fence. A fence-string approach
+ * (`'```'+lang+'\n'+body+'\n```'`) breaks out of the fence whenever the body
+ * itself contains a line of three backticks (common in Markdown files), so the
+ * tail renders as live markdown. This builds the block directly — the body can
+ * never escape it. Used by the read/write tool cards.
+ */
+export function renderCodeBlock(code: string, lang: string): string {
+  registerLanguages();
+  const body = highlightCode(code ?? '', (lang || '').toLowerCase());
+  const cls = lang ? `language-${lang} hljs` : 'hljs';
+  return sanitizeHtml(`<pre class="hljs"><code class="${md.utils.escapeHtml(cls)}">${body}</code></pre>`);
+}
+
 /** Render a single line of markdown (no block wrapper), sanitized. */
 export function renderMarkdownInline(src: string): string {
   registerLanguages();

@@ -12,7 +12,7 @@
  * not also shown standalone. Orphan results (no matching call) stay visible.
  */
 
-import { createMemo, createEffect, For, type JSX } from 'solid-js';
+import { createMemo, createEffect, For, Show, type JSX } from 'solid-js';
 import { createVirtualizer } from '@tanstack/solid-virtual';
 import type { AgentMessage, ToolResultMessage } from '../../shared/protocol.js';
 import { MessageView } from './message-view.js';
@@ -118,12 +118,16 @@ export function MessageList(props: MessageListProps): JSX.Element {
                 transform: `translateY(${vi.start}px)`,
               }}
             >
-              <MessageView
-                message={rows()[vi.index]}
-                isLastAssistant={rows()[vi.index] === derived().lastAssistant}
-                streaming={props.streaming}
-                resultFor={resultFor}
-              />
+              <Show when={rows()[vi.index]}>
+                {(message) => (
+                  <MessageView
+                    message={message()}
+                    isLastAssistant={message() === derived().lastAssistant}
+                    streaming={props.streaming}
+                    resultFor={resultFor}
+                  />
+                )}
+              </Show>
             </div>
           )}
         </For>

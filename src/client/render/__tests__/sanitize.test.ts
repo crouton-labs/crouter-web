@@ -21,7 +21,7 @@ const { window } = new JSDOM('<!doctype html><html><body></body></html>');
 
 // Imported AFTER the window is in place.
 const { sanitizeHtml, escapeText } = await import('../sanitize.js');
-const { renderMarkdown } = await import('../markdown.js');
+const { renderMarkdown, renderCodeBlock } = await import('../markdown.js');
 
 const DANGEROUS_TAGS = new Set(['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'FRAME', 'FRAMESET']);
 const URL_ATTRS = ['href', 'src', 'action', 'formaction', 'data', 'xlink:href', 'srcdoc', 'background'];
@@ -100,6 +100,18 @@ test('renderMarkdown still produces real formatting + highlighting', () => {
   assert.match(out, /<h1[^>]*>/i, 'heading rendered');
   assert.match(out, /<strong>bold<\/strong>/i, 'bold rendered');
   assert.match(out, /<pre[^>]*class="hljs"|<code[^>]*hljs/i, 'code block highlighted');
+});
+
+test('renderCodeBlock keeps a backtick-fence body inside the code block', () => {
+  // A file body containing a line of three backticks plus a markdown heading
+  // must NOT break out of the fence and render the heading as live markup
+  // (the old `'```'+body+'```'` fence-string path did exactly that).
+  const body = 'line one\n```\n# Not A Heading\n[x](javascript:alert(1))';
+  const out = renderCodeBlock(body, 'markdown');
+  assert.doesNotMatch(out, /<h1[^>]*>/i, 'heading must stay literal inside the code block');
+  assert.doesNotMatch(out, /<a\s/i, 'link must stay literal inside the code block');
+  assert.match(out, /# Not A Heading/, 'the literal text is present (escaped) in the block');
+  assertInert(out, 'renderCodeBlock/fence-breakout');
 });
 
 test('escapeText neutralizes angle brackets and quotes', () => {
