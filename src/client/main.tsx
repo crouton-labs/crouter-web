@@ -6,8 +6,9 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app.js";
 import "./index.css";
 
-// Dark-primary console (spec north star); the meta color-scheme stays "dark light".
-document.documentElement.classList.add("dark");
+// Theme is owned by the ProfileProvider (it toggles .dark/.light from the
+// active profile's defaultTheme). Operator (the default) → dark, identical to
+// the previous hardcoded force.
 
 const root = document.getElementById("root");
 if (!root) throw new Error("crouter-web: #root element not found in index.html");

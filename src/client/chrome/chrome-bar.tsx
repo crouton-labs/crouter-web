@@ -1,11 +1,15 @@
 /**
- * Per-node chrome bar (spec §5.F). Identity (name/kind/mode/lifecycle/status,
- * cwd) comes from the node detail fetched by the page; live chrome (branch,
- * model, token burn, context usage, tool-call activity, stats) comes from the
- * session store's server-pushed chrome + state (D12 — rendered, never
- * computed from raw events). The streaming/idle indicator (C.10) reads
- * state.isStreaming. A dormant view (source==='static') is marked
- * "last-known, not live" and omits tool_calls/stats/context% per F.4.
+ * Per-node chrome, split into the two slots of the session screen (design
+ * §3.3): TitleBar = identity (name/kind/mode/lifecycle/status), the `header`
+ * slot (no capability — always present); ChromePanel = live chrome
+ * (cwd/branch/model/token burn/context usage/tool activity/stats), the `chrome`
+ * slot (capability `node.internals`). Identity comes from the page-fetched node
+ * detail; live chrome comes from the session store's server-pushed chrome +
+ * state (D12 — rendered, never computed from raw events). The streaming/idle
+ * indicator (C.10) reads state.isStreaming. A dormant view (source==='static')
+ * is marked "last-known, not live" and omits tool_calls/stats/context% per F.4.
+ * For Operator both slots render together inside the page's flex-col wrapper,
+ * reproducing the previous single ChromeBar exactly.
  */
 
 import type { ReactNode } from 'react';
@@ -39,11 +43,11 @@ function livePillStatus(
   return streaming ? 'active' : 'idle'; // live broker — reflect live activity
 }
 
-export function ChromeBar(props: {
+/** Identity line — the `header` slot. Always present (no capability). */
+export function TitleBar(props: {
   store: ChromeBarStore;
   detail: NodeDetail | null;
 }): ReactNode {
-  const chrome = props.store.chrome;
   const dormant = props.store.source === 'static';
   const streaming = props.store.state?.isStreaming ?? false;
   const d = props.detail;
@@ -52,8 +56,7 @@ export function ChromeBar(props: {
     : null;
 
   return (
-    <div className={cn('flex min-w-0 flex-1 flex-col gap-1', dormant && 'opacity-70')}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
         {d ? (
           <>
             <span className="font-mono text-sm font-semibold truncate">{d.name}</span>
@@ -74,22 +77,35 @@ export function ChromeBar(props: {
         ) : (
           <span className="font-mono text-sm font-semibold">…</span>
         )}
+      <span
+        className={cn('font-mono text-xs', streaming ? 'text-success' : 'text-muted-foreground')}
+      >
+        {streaming ? '● streaming' : '○ idle'}
+      </span>
+      {dormant && (
         <span
-          className={cn('font-mono text-xs', streaming ? 'text-success' : 'text-muted-foreground')}
+          className="font-mono text-xs text-warning"
+          title="dormant node — last-known values, not live"
         >
-          {streaming ? '● streaming' : '○ idle'}
+          last-known (not live)
         </span>
-        {dormant && (
-          <span
-            className="font-mono text-xs text-warning"
-            title="dormant node — last-known values, not live"
-          >
-            last-known (not live)
-          </span>
-        )}
-      </div>
+      )}
+    </div>
+  );
+}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-muted-foreground">
+/** Live chrome line — the `chrome` slot (capability `node.internals`). */
+export function ChromePanel(props: {
+  store: ChromeBarStore;
+  detail: NodeDetail | null;
+}): ReactNode {
+  const chrome = props.store.chrome;
+  const dormant = props.store.source === 'static';
+  const streaming = props.store.state?.isStreaming ?? false;
+  const d = props.detail;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-muted-foreground">
         {d?.cwd && (
           <Field label="cwd" title={d.cwd} className="min-w-0">
             <span className="truncate">{d.cwd}</span>
@@ -126,7 +142,6 @@ export function ChromeBar(props: {
             {chrome.stats.cost !== undefined && <> · ${chrome.stats.cost.toFixed(2)}</>}
           </Field>
         )}
-      </div>
     </div>
   );
 }

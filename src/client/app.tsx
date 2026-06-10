@@ -4,14 +4,17 @@
 import { BrowserRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppRoutes, ReconnectingBanner } from "./app-routes.js";
+import { ProfileProvider } from "./profile/provider.js";
 
 export function App() {
   return (
-    <BrowserRouter>
-      <TooltipProvider delayDuration={300}>
-        <ReconnectingBanner />
-        <AppRoutes />
-      </TooltipProvider>
-    </BrowserRouter>
+    <ProfileProvider>
+      <BrowserRouter>
+        <TooltipProvider delayDuration={300}>
+          <ReconnectingBanner />
+          <AppRoutes />
+        </TooltipProvider>
+      </BrowserRouter>
+    </ProfileProvider>
   );
 }

@@ -1,20 +1,27 @@
 /**
- * Node session shell (spec §5.C/D/E/F/H). Owns the session store for one node,
- * auto-connects via useSessionStore (self-managing), and assembles the chrome
- * bar, presence, the input box (prompt vs steer vs disabled-for-observer), the
- * command palette, the message list, and the extension dialog. Orchestrates the
- * dormant→live transition: a static source shows read-only + Revive, and the
- * live snapshot arrives over the SAME socket on revive (no page reload).
- * broker_status down/reconnecting freezes input.
+ * SessionScreen (spec §5.C/D/E/F/H) — ONE node page composed through the profile
+ * slot registry (design §3.3). The layout places named slots (header, chrome,
+ * stream, rail, arbitration, composer, trace); each slot is filled from the
+ * registry below and rendered only if the active profile grants its capability.
+ * Operator grants everything, so the rendered result is identical to the
+ * pre-abstraction node page. The chat substrate (MessageList, tool cards,
+ * session store) is shared and untouched. Orchestrates the dormant→live
+ * transition: a static source shows read-only + revive, and the live snapshot
+ * arrives over the SAME socket on revive (no page reload). broker_status
+ * down/reconnecting freezes input.
  */
 
-import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Command, NodeDetail, ThinkingLevel } from '../../shared/protocol.js';
+import type { Capability } from '../profile/types.js';
 import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } from '../api/rest.js';
-import { useSessionStore } from '../store/session-store.js';
-import { ChromeBar } from '../chrome/chrome-bar.js';
+import { useSessionStore, type SessionStore } from '../store/session-store.js';
+import { TitleBar, ChromePanel } from '../chrome/chrome-bar.js';
 import { Presence } from '../chrome/presence.js';
+import { useTerm, useGrants } from '../profile/provider.js';
+import { Slot, actionsFor, type SlotRegistry } from '../profile/slots.js';
+import { cn } from '@/lib/utils.js';
 import { CommandPalette } from '../command-palette/palette.js';
 import { ExtensionDialog } from '../dialogs/extension-dialog.js';
 import { MessageList } from '../session/message-list.js';
@@ -38,8 +45,20 @@ import {
 
 const THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 
+/** The session screen's named slots (design §3.3). `rail` and `trace` are part
+ *  of the layout contract but unfilled in Phase 1 (Studio's ActivityRail and
+ *  the EventInspector are later phases) — an unregistered slot renders nothing. */
+type SessionSlot =
+  | 'header'
+  | 'chrome'
+  | 'stream'
+  | 'rail'
+  | 'arbitration'
+  | 'composer'
+  | 'trace';
+
 // ---------------------------------------------------------------------------
-// NodePage
+// NodePage (SessionScreen)
 // ---------------------------------------------------------------------------
 
 export function NodePage(props: { id: string }) {
@@ -121,14 +140,67 @@ export function NodePage(props: { id: string }) {
     }
   };
 
+  const tCanvas = useTerm('canvas');
+  const tSteer = useTerm('steer');
+
+  // The session screen's panel registry. Slots whose capability the active
+  // profile withholds simply don't render (design §3.3). Render functions are
+  // closures over the page's store + handlers — the chat substrate is shared.
+  const slots: SlotRegistry<SessionSlot> = {
+    header: { render: () => <TitleBar store={store} detail={detail} /> },
+    chrome: { cap: 'node.internals', render: () => <ChromePanel store={store} detail={detail} /> },
+    stream: { render: () => <MessageList messages={store.messages} streaming={streaming} /> },
+    arbitration: { cap: 'node.arbitration', render: () => <Presence store={store} /> },
+    composer: {
+      render: () =>
+        dormant ? (
+          <DormantBar id={props.id} reviving={reviving} onRevive={doRevive} onClose={doClose} />
+        ) : (
+          <>
+            <DriveToolbar store={store} canDrive={canDrive} streaming={streaming} onClose={doClose} />
+            <div className="relative flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3">
+              <CommandPalette
+                commands={commands}
+                query={input}
+                visible={input.startsWith('/')}
+                onSelect={selectCommand}
+              />
+              <Textarea
+                className="resize-none font-mono text-sm"
+                value={input}
+                onChange={(e) => setInput(e.currentTarget.value)}
+                onKeyDown={onInputKeyDown}
+                disabled={!canDrive}
+                placeholder={inputPlaceholder(isController, brokerUp)}
+                rows={3}
+              />
+              <div className="flex items-center justify-end gap-2">
+                <InboxMessageButton id={props.id} />
+                <Button
+                  variant="default"
+                  onClick={sendPrimary}
+                  disabled={!canDrive || !input.trim()}
+                >
+                  {streaming ? tSteer : 'Send'}
+                </Button>
+              </div>
+            </div>
+          </>
+        ),
+    },
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
         <Button variant="link" onClick={() => navigate('/')}>
-          ← canvas
+          ← {tCanvas}
         </Button>
-        <ChromeBar store={store} detail={detail} />
-        <Presence store={store} />
+        <div className={cn('flex min-w-0 flex-1 flex-col gap-1', dormant && 'opacity-70')}>
+          <Slot reg={slots} name="header" />
+          <Slot reg={slots} name="chrome" />
+        </div>
+        <Slot reg={slots} name="arbitration" />
       </header>
 
       <BrokerBanner state={store.brokerStatus} dormant={dormant} />
@@ -144,43 +216,12 @@ export function NodePage(props: { id: string }) {
       )}
 
       <main className="min-h-0 flex-1 overflow-auto">
-        <MessageList messages={store.messages} streaming={streaming} />
+        <Slot reg={slots} name="stream" />
       </main>
 
-      {dormant ? (
-        <DormantBar id={props.id} reviving={reviving} onRevive={doRevive} onClose={doClose} />
-      ) : (
-        <>
-          <DriveToolbar store={store} canDrive={canDrive} streaming={streaming} onClose={doClose} />
-          <div className="relative flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3">
-            <CommandPalette
-              commands={commands}
-              query={input}
-              visible={input.startsWith('/')}
-              onSelect={selectCommand}
-            />
-            <Textarea
-              className="resize-none font-mono text-sm"
-              value={input}
-              onChange={(e) => setInput(e.currentTarget.value)}
-              onKeyDown={onInputKeyDown}
-              disabled={!canDrive}
-              placeholder={inputPlaceholder(isController, brokerUp)}
-              rows={3}
-            />
-            <div className="flex items-center justify-end gap-2">
-              <InboxMessageButton id={props.id} />
-              <Button
-                variant="default"
-                onClick={sendPrimary}
-                disabled={!canDrive || !input.trim()}
-              >
-                {streaming ? 'Steer' : 'Send'}
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
+      <Slot reg={slots} name="rail" />
+      <Slot reg={slots} name="composer" />
+      <Slot reg={slots} name="trace" />
 
       <ExtensionDialog store={store} />
     </div>
@@ -225,7 +266,7 @@ function DriveToolbar({
   streaming,
   onClose,
 }: {
-  store: ReturnType<typeof useSessionStore>;
+  store: SessionStore;
   canDrive: boolean;
   streaming: boolean;
   onClose: () => void;
@@ -234,47 +275,82 @@ function DriveToolbar({
   // shows the user's pick immediately (m4).
   const [override, setOverride] = useState<ThinkingLevel | null>(null);
   const thinking: ThinkingLevel = override ?? store.state?.thinkingLevel ?? 'medium';
+  const grants = useGrants();
+  const tCompact = useTerm('compact');
+  const tClose = useTerm('close');
+  const tNode = useTerm('node');
+
+  // The toolbar's membership is data: each control declares an optional
+  // capability and actionsFor keeps only the granted ones, in order. Operator
+  // grants everything → the full toolbar, identical to before.
+  const controls: { key: string; cap?: Capability; node: ReactNode }[] = [
+    {
+      key: 'abort',
+      node: (
+        <Button variant="secondary" disabled={!canDrive || !streaming} onClick={() => store.abort()}>
+          Abort
+        </Button>
+      ),
+    },
+    {
+      key: 'cycle',
+      node: (
+        <Button variant="secondary" disabled={!canDrive} onClick={() => store.cycleModel()}>
+          Cycle model
+        </Button>
+      ),
+    },
+    {
+      key: 'thinking',
+      node: (
+        <label className="flex items-center gap-1 text-sm">
+          thinking
+          <Select
+            disabled={!canDrive}
+            value={thinking}
+            onValueChange={(level) => {
+              setOverride(level as ThinkingLevel);
+              store.setThinkingLevel(level as ThinkingLevel);
+            }}
+          >
+            <SelectTrigger className="h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {THINKING_LEVELS.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {l}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      ),
+    },
+    {
+      key: 'compact',
+      node: (
+        <Button variant="secondary" disabled={!canDrive} onClick={() => store.compact()}>
+          {tCompact}
+        </Button>
+      ),
+    },
+    {
+      key: 'close',
+      cap: 'node.lifecycle.raw',
+      node: (
+        <Button variant="destructive" onClick={onClose}>
+          {tClose} {tNode}
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-4 py-2">
-      <Button
-        variant="secondary"
-        disabled={!canDrive || !streaming}
-        onClick={() => store.abort()}
-      >
-        Abort
-      </Button>
-      <Button variant="secondary" disabled={!canDrive} onClick={() => store.cycleModel()}>
-        Cycle model
-      </Button>
-      <label className="flex items-center gap-1 text-sm">
-        thinking
-        <Select
-          disabled={!canDrive}
-          value={thinking}
-          onValueChange={(level) => {
-            setOverride(level as ThinkingLevel);
-            store.setThinkingLevel(level as ThinkingLevel);
-          }}
-        >
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {THINKING_LEVELS.map((l) => (
-              <SelectItem key={l} value={l}>
-                {l}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </label>
-      <Button variant="secondary" disabled={!canDrive} onClick={() => store.compact()}>
-        Compact
-      </Button>
-      <Button variant="destructive" onClick={onClose}>
-        Close node
-      </Button>
+      {actionsFor(controls, grants).map((c) => (
+        <Fragment key={c.key}>{c.node}</Fragment>
+      ))}
     </div>
   );
 }
@@ -294,18 +370,41 @@ function DormantBar({
   onRevive: () => void;
   onClose: () => void;
 }) {
+  const grants = useGrants();
+  const tNode = useTerm('node');
+  const tRevive = useTerm('revive');
+  const tClose = useTerm('close');
+
+  const actions: { key: string; cap?: Capability; node: ReactNode }[] = [
+    {
+      key: 'revive',
+      cap: 'node.lifecycle.raw',
+      node: (
+        <Button variant="default" disabled={reviving} onClick={onRevive}>
+          {reviving ? 'Reviving…' : tRevive}
+        </Button>
+      ),
+    },
+    {
+      key: 'close',
+      cap: 'node.lifecycle.raw',
+      node: (
+        <Button variant="destructive" onClick={onClose}>
+          {tClose} {tNode}
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-4 py-3">
       <span className="text-muted-foreground text-sm">
-        This node is dormant (read-only). Revive to drive it live.
+        This {tNode} is dormant (read-only). {tRevive} to drive it live.
       </span>
       <InboxMessageButton id={id} />
-      <Button variant="default" disabled={reviving} onClick={onRevive}>
-        {reviving ? 'Reviving…' : 'Revive'}
-      </Button>
-      <Button variant="destructive" onClick={onClose}>
-        Close node
-      </Button>
+      {actionsFor(actions, grants).map((a) => (
+        <Fragment key={a.key}>{a.node}</Fragment>
+      ))}
     </div>
   );
 }
