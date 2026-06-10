@@ -10,7 +10,7 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils.js';
-import type { NodeDetail, SessionState } from '../../shared/protocol.js';
+import type { BrokerStatus, NodeDetail, SessionState } from '../../shared/protocol.js';
 import type { NodeChrome } from '../store/session-store.js';
 
 /** React-compatible subset of the session store — plain values, not signal accessors. */
@@ -18,6 +18,25 @@ interface ChromeBarStore {
   chrome: NodeChrome;
   state: SessionState | null;
   source: 'broker' | 'static';
+  brokerStatus: BrokerStatus;
+}
+
+/**
+ * The status pill is derived from the LIVE connection/broker state, not the
+ * (possibly stale) DB row carried on `detail`. After a revive the DB row can
+ * still read "canceled"/"done" for a beat while the broker is already live;
+ * deriving from `source`/`brokerStatus`/streaming keeps the pill honest.
+ */
+function livePillStatus(
+  d: NodeDetail,
+  source: 'broker' | 'static',
+  brokerStatus: BrokerStatus,
+  streaming: boolean,
+): string {
+  if (source === 'static') return d.status; // dormant — last-known DB row
+  if (brokerStatus === 'down') return 'dead';
+  if (brokerStatus === 'reconnecting') return 'idle';
+  return streaming ? 'active' : 'idle'; // live broker — reflect live activity
 }
 
 export function ChromeBar(props: {
@@ -28,6 +47,9 @@ export function ChromeBar(props: {
   const dormant = props.store.source === 'static';
   const streaming = props.store.state?.isStreaming ?? false;
   const d = props.detail;
+  const pillStatus = d
+    ? livePillStatus(d, props.store.source, props.store.brokerStatus, streaming)
+    : null;
 
   return (
     <div className={cn('flex min-w-0 flex-1 flex-col gap-1', dormant && 'opacity-70')}>
@@ -39,10 +61,14 @@ export function ChromeBar(props: {
             <Chip>{d.mode}</Chip>
             <Chip>{d.lifecycle}</Chip>
             <span
-              className="inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-xs"
-              style={{ color: `var(--status-${d.status})`, borderColor: `var(--status-${d.status})66` }}
+              className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-xs"
+              style={{ color: `var(--status-${pillStatus})`, borderColor: `var(--status-${pillStatus})66` }}
             >
-              {d.status}
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: `var(--status-${pillStatus})` }}
+              />
+              {pillStatus}
             </span>
           </>
         ) : (
