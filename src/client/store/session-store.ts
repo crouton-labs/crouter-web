@@ -62,6 +62,11 @@ export interface SessionStore {
   /** Server-bridge socket connectivity (distinct from broker liveness): false
    * while the SPA↔server WS is down, e.g. a server restart (§7). */
   serverConnected: boolean;
+  /** True only once the session socket has actually opened. Initialized false
+   * (unlike the optimistic `serverConnected`) so controller-only frames — e.g.
+   * request_control — can be gated on a genuinely-open socket and never race
+   * WS-readiness on first click. */
+  socketReady: boolean;
   /** Last surfaced WS error, for transient UI; cleared on next snapshot. */
   error: { code: string; message: string } | null;
   // --- send wrappers (controller-only frames gated server-side) ---
@@ -88,6 +93,7 @@ export function useSessionStore(nodeId: string): SessionStore {
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus>('connected');
   const [source, setSource] = useState<'broker' | 'static'>('broker');
   const [serverConnected, setServerConnected] = useState(true);
+  const [socketReady, setSocketReady] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
   const socketRef = useRef<SessionSocket | null>(null);
@@ -103,6 +109,7 @@ export function useSessionStore(nodeId: string): SessionStore {
     setBrokerStatus('connected');
     setSource('broker');
     setServerConnected(true);
+    setSocketReady(false);
     setError(null);
 
     const onServerMsg = (msg: WsServerMsg): void => {
@@ -165,10 +172,12 @@ export function useSessionStore(nodeId: string): SessionStore {
       onMessage: onServerMsg,
       onOpen: () => {
         setServerConnected(true);
+        setSocketReady(true);
         useServerStatus.getState().setReachable(true);
       },
       onClose: () => {
         setServerConnected(false);
+        setSocketReady(false);
         useServerStatus.getState().setReachable(false);
       },
     });
@@ -230,6 +239,7 @@ export function useSessionStore(nodeId: string): SessionStore {
     brokerStatus,
     source,
     serverConnected,
+    socketReady,
     error,
     prompt,
     steer,

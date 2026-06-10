@@ -13,6 +13,8 @@ import type { Presence as PresenceData, WebRole } from '../../shared/protocol.js
 interface PresenceStore {
   presence: PresenceData;
   role: WebRole;
+  /** Whether the session socket is actually open (gates request_control). */
+  socketReady: boolean;
   requestControl: () => void;
   releaseControl: () => void;
 }
@@ -40,7 +42,13 @@ export function Presence(props: { store: PresenceStore }): ReactNode {
           Release control
         </Button>
       ) : (
-        <Button variant="secondary" size="sm" onClick={() => props.store.requestControl()}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!props.store.socketReady}
+          title={props.store.socketReady ? undefined : 'connecting…'}
+          onClick={() => props.store.requestControl()}
+        >
           Request control
         </Button>
       )}
