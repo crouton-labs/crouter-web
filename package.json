@@ -1,6 +1,6 @@
 {
   "name": "@crouton-kit/crouter-web",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Hostable web frontend for the crouter agent runtime — survey the canvas and drive headless pi sessions in a browser.",
   "type": "module",
   "bin": {
