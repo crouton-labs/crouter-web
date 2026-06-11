@@ -9,22 +9,22 @@
 
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { AgentMessage, ToolResultMessage } from '../../shared/protocol.js';
+import type { FoldedMessage, ToolResultMessage } from '../../shared/protocol.js';
 import { MessageView } from './message-view.js';
 import { DensityContext, type Density } from '../lib/density-context.js';
 import { cn } from '@/lib/utils.js';
 
 export interface MessageListProps {
   /** The folded message history. */
-  messages: AgentMessage[];
+  messages: FoldedMessage[];
   /** True while the engine is producing a turn. */
   streaming: boolean;
 }
 
 interface Derived {
-  visible: AgentMessage[];
+  visible: FoldedMessage[];
   resultMap: Map<string, ToolResultMessage>;
-  lastAssistant: AgentMessage | undefined;
+  lastAssistant: FoldedMessage | undefined;
 }
 
 const DENSITY_KEY = 'crtr-density';
@@ -49,7 +49,7 @@ export function MessageList({ messages, streaming }: MessageListProps) {
   const derived = useMemo<Derived>(() => {
     const resultMap = new Map<string, ToolResultMessage>();
     const callIds = new Set<string>();
-    let lastAssistant: AgentMessage | undefined;
+    let lastAssistant: FoldedMessage | undefined;
     for (const m of messages) {
       if (m.role === 'assistant') {
         lastAssistant = m;

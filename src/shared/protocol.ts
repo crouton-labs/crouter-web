@@ -42,6 +42,29 @@ import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { RpcExtensionUIRequest } from '@earendil-works/pi-coding-agent';
 
 // ===========================================================================
+// FoldedMessage — AgentMessage annotated with server-side provenance tags.
+// FROZEN-contract override: `origin` is additive (optional) and never carried
+// on the upstream broker wire — the server stamps it at fold time using the
+// coalesce() digest format that canvas-inbox-watcher injects (two crouton-kit
+// packages sharing an internal contract; see src/server/session/inbox-detect.ts).
+// ===========================================================================
+
+/**
+ * An `AgentMessage` enriched with server-side origin metadata.
+ * Only `role:'user'` messages can carry `origin:'inbox'`; all others leave
+ * `origin` undefined. `'human'` is reserved for future explicit human-origin
+ * tagging (currently unset — absence means human by default).
+ *
+ * Defined as an intersection (not `interface extends`) because `AgentMessage`
+ * is a union type and TypeScript does not allow extending unions.
+ */
+export type FoldedMessage = AgentMessage & {
+  /** Set to `'inbox'` when the server detects this user message was injected
+   *  by the canvas-inbox-watcher extension (a coalesced inbox digest). */
+  origin?: 'inbox' | 'human';
+};
+
+// ===========================================================================
 // Closed enums on node identity (spec §6.1, design Data model table)
 // ===========================================================================
 
@@ -369,7 +392,7 @@ export type BrokerStatus = 'connected' | 'reconnecting' | 'down' | 'revived';
  */
 export interface SnapshotMsg {
   type: 'snapshot';
-  history: AgentMessage[];
+  history: FoldedMessage[];
   stats: SessionStats;
   state: SessionState;
   role: WebRole;

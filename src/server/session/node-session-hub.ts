@@ -40,6 +40,7 @@ import type {
   BrokerStatus,
   ChromeMsg,
   Command,
+  FoldedMessage,
   SessionState,
   SnapshotMsg,
   WebRole,
@@ -47,6 +48,7 @@ import type {
   WsServerMsg,
 } from '../../shared/protocol.js';
 import { applyEvent, initMessages } from '../../shared/message-reducer.js';
+import { tagInboxMessages } from './inbox-detect.js';
 import { ControllerArbiter } from './controller-arbiter.js';
 import {
   ackToMsg,
@@ -119,8 +121,8 @@ export class NodeSessionHub {
   private upstream: ViewSocketClient | null = null;
   /** True once we have ever seen a `welcome` (so a later connect is a revive). */
   private everConnected = false;
-  /** Folded message history (the reducer store). */
-  private messages: AgentMessage[] = [];
+  /** Folded message history (the reducer store), tagged with inbox origin. */
+  private messages: FoldedMessage[] = [];
   private stats: SessionStats | null = null;
   /** Model context window, cached from the welcome snapshot so per-turn chrome
    *  can recompute context-usage percent without a re-fetch (AC-16). */
@@ -366,7 +368,7 @@ export class NodeSessionHub {
     }
     try {
       const norm = await this.deps.normalizeDormantSession(file);
-      this.messages = initMessages(norm.history);
+      this.messages = tagInboxMessages(initMessages(norm.history));
       this.state = staticState(this.nodeId, norm);
       this.stats = staticStats(this.nodeId, norm.history);
       this.pendingDialog = null;
@@ -413,7 +415,7 @@ export class NodeSessionHub {
     this.source = 'broker';
     this.reconnectAttempts = 0;
 
-    this.messages = initMessages(frame.snapshot.messages);
+    this.messages = tagInboxMessages(initMessages(frame.snapshot.messages));
     this.stats = frame.snapshot.stats;
     this.contextWindow = frame.snapshot.stats.contextUsage?.contextWindow ?? this.contextWindow;
     this.state = mapState(frame.snapshot.state);
@@ -480,7 +482,14 @@ export class NodeSessionHub {
 
   private onEvent(event: AgentSessionEvent): void {
     // Fold into the cached snapshot so mid-stream joiners are current (D12)…
-    this.messages = applyEvent(this.messages, event);
+    // Re-tag after folding: message_start appends a new user message that may be
+    // an inbox digest injected by canvas-inbox-watcher.
+    const prev = this.messages;
+    const next = applyEvent(this.messages, event) as FoldedMessage[];
+    this.messages =
+      event.type === 'message_start' && next !== prev
+        ? tagInboxMessages(next)
+        : next;
     // …keep the streaming flag fresh for the indicator (spec C.10)…
     if (this.state) {
       if (event.type === 'agent_start') this.state = { ...this.state, isStreaming: true };

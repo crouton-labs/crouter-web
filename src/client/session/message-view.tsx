@@ -14,7 +14,7 @@
 
 import type { ComponentType } from 'react';
 import type {
-  AgentMessage,
+  FoldedMessage,
   AssistantMessage,
   UserMessage,
   ToolResultMessage,
@@ -27,9 +27,12 @@ import { ThinkingBlock } from './thinking-block.js';
 import { ImageBlock } from './image-block.js';
 import { getToolCard } from './tool-card/registry.js';
 import type { ToolCardProps } from './tool-card/parts.js';
+import { usePeek } from './tool-card/parts.js';
+import { extractPeekablePaths } from '../lib/file-link.js';
+import { extractInboxSender } from '../../shared/inbox-detect.js';
 
 export interface MessageViewProps {
-  message: AgentMessage;
+  message: FoldedMessage;
   /** True iff this is the last assistant message in history. */
   isLastAssistant: boolean;
   streaming: boolean;
@@ -40,6 +43,9 @@ export interface MessageViewProps {
 export function MessageView({ message, isLastAssistant, streaming, resultFor }: MessageViewProps) {
   const role = message.role;
   if (role === 'user') {
+    if (message.origin === 'inbox') {
+      return <InboundView message={message as UserMessage} />;
+    }
     return (
       <div className="text-sm leading-[1.55] break-words">
         <UserView message={message as UserMessage} />
@@ -176,5 +182,81 @@ function OrphanToolResult({ message }: { message: ToolResultMessage }) {
       inProgress={false}
       isError={message.isError}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InboundView — inbox-origin user messages (origin === 'inbox')
+// Matches the mockup `.inbound` block: steel-blue left rail using --status-done,
+// header "INBOX · FROM <sender>", body text, mono ref lines linkified for peek.
+// ---------------------------------------------------------------------------
+
+function InboundView({ message }: { message: UserMessage }) {
+  const { onPeek, peekedPath } = usePeek();
+  const raw = typeof message.content === 'string'
+    ? message.content
+    : (message.content as Array<{ type: string; text?: string }>)
+        .filter((b) => b.type === 'text')
+        .map((b) => (typeof b.text === 'string' ? b.text : ''))
+        .join('');
+
+  const sender = extractInboxSender(raw);
+  const peekablePaths = extractPeekablePaths(raw);
+
+  // Render body text with peekable paths linkified inline.
+  function renderBody(text: string) {
+    if (peekablePaths.length === 0) {
+      return <span className="whitespace-pre-wrap">{text}</span>;
+    }
+    // Split on peekable paths and interleave clickable spans.
+    const parts: React.ReactNode[] = [];
+    let remaining = text;
+    let key = 0;
+    for (const path of peekablePaths) {
+      const idx = remaining.indexOf(path);
+      if (idx === -1) continue;
+      if (idx > 0) parts.push(<span key={key++} className="whitespace-pre-wrap">{remaining.slice(0, idx)}</span>);
+      const isActive = peekedPath === path;
+      parts.push(
+        <button
+          key={key++}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onPeek(path); }}
+          className={[
+            'font-mono text-[10.5px] text-[var(--color-muted-foreground)]',
+            'hover:text-[var(--color-status-done)] cursor-pointer',
+            isActive ? 'underline' : 'underline decoration-dotted',
+          ].join(' ')}
+        >
+          {path}
+        </button>,
+      );
+      remaining = remaining.slice(idx + path.length);
+    }
+    if (remaining) parts.push(<span key={key++} className="whitespace-pre-wrap">{remaining}</span>);
+    return <>{parts}</>;
+  }
+
+  return (
+    <div className="flex gap-3 px-4 py-3 rounded-[10px] border border-border border-l-2 border-l-[var(--color-status-done)] bg-[color-mix(in_oklch,var(--color-status-done)_4%,transparent)]">
+      {/* icon */}
+      <span className="text-[13px] text-[var(--color-status-done)] pt-[1px] flex-none select-none">◍</span>
+      <div className="min-w-0 flex-1">
+        {/* header */}
+        <div className="font-mono text-[8.5px] tracking-[0.14em] uppercase text-[var(--color-status-done)] mb-1 flex gap-2 items-center">
+          <span>inbox</span>
+          {sender && (
+            <>
+              <span className="text-[var(--color-muted-foreground)]">·</span>
+              <span>from {sender}</span>
+            </>
+          )}
+        </div>
+        {/* body */}
+        <div className="text-[13px] text-muted-foreground leading-[1.55]">
+          {renderBody(raw)}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -12,8 +12,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { applyEvent, initMessages } from '../../shared/message-reducer.js';
+import { isInboxDigest as isInboxDigestClient } from '../../shared/inbox-detect.js';
 import type {
-  AgentMessage,
+  FoldedMessage,
   BrokerStatus,
   ContextUsage,
   DialogResponseValue,
@@ -54,7 +55,7 @@ const EMPTY_CHROME: NodeChrome = {
 
 export interface SessionStore {
   // --- plain values ---
-  messages: AgentMessage[];
+  messages: FoldedMessage[];
   state: SessionState | null;
   role: WebRole;
   chrome: NodeChrome;
@@ -93,7 +94,7 @@ export interface SessionStore {
 
 /** Open a session stream for `nodeId` and return plain reactive values + send methods. */
 export function useSessionStore(nodeId: string): SessionStore {
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [messages, setMessages] = useState<FoldedMessage[]>([]);
   const [state, setState] = useState<SessionState | null>(null);
   const [role, setRole] = useState<WebRole>('observer');
   const [chrome, setChrome] = useState<NodeChrome>(EMPTY_CHROME);
@@ -127,7 +128,9 @@ export function useSessionStore(nodeId: string): SessionStore {
     const onServerMsg = (msg: WsServerMsg): void => {
       switch (msg.type) {
         case 'snapshot': {
-          setMessages(initMessages(msg.history));
+          // msg.history is FoldedMessage[] (server-tagged); initMessages slices
+          // shallowly, preserving the origin field on each message.
+          setMessages(initMessages(msg.history) as FoldedMessage[]);
           setState(msg.state);
           setRole(msg.role);
           setPresence({ viewers: msg.viewers, controller: msg.controller });
@@ -140,7 +143,25 @@ export function useSessionStore(nodeId: string): SessionStore {
           break;
         }
         case 'event': {
-          setMessages((prev) => applyEvent(prev, msg.event));
+          // For message_start events a new user message may be an inbox digest;
+          // re-tag the last message if it was just appended (mirrors server hub).
+          const isNewMsg = msg.event.type === 'message_start';
+          setMessages((prev) => {
+            const next = applyEvent(prev, msg.event) as FoldedMessage[];
+            if (isNewMsg && next !== prev && next.length > 0) {
+              const last = next[next.length - 1];
+              if (last && last.role === 'user') {
+                const content = (last as { content: unknown }).content;
+                const text = typeof content === 'string' ? content : null;
+                if (text !== null && isInboxDigestClient(text)) {
+                  const tagged = next.slice();
+                  tagged[next.length - 1] = { ...last, origin: 'inbox' };
+                  return tagged;
+                }
+              }
+            }
+            return next;
+          });
           // Reflect the streaming/idle indicator (C.10) from turn boundaries.
           const ev = msg.event;
           if (ev.type === 'agent_start') setState((s) => (s ? { ...s, isStreaming: true } : s));
