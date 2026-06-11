@@ -144,7 +144,7 @@ function StudioTopBar({ home }: { home: string }) {
                   ? '#247d4b'
                   : 'var(--muted-foreground)',
                 opacity: view.status === 'active' ? 1 : 0.5,
-                animation: view.status === 'active' ? 'pulse-active 2.4s ease-out infinite' : undefined,
+                animation: view.status === 'active' ? 'pulse 2.4s ease-out infinite' : undefined,
               }}
             />
             {view.title}
@@ -165,6 +165,9 @@ function StudioTopBar({ home }: { home: string }) {
 
       {/* right actions */}
       <div className="ml-auto flex items-center gap-2">
+        {/* Audience switcher — always present so Studio can return to Operator. */}
+        <ProfileSwitcher />
+
         {/* Chats */}
         <button
           type="button"
