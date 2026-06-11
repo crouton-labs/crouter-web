@@ -72,6 +72,7 @@
   --line: var(--border);
   --line2: oklch(0.92 0.008 80 / 16%);
   --raise: oklch(1 0 0 / 3.5%); /* inset top-edge highlight color */
+  --scrim: oklch(0.1 0.008 75 / 55%); /* modal/overlay backdrop dim */
   --panel: var(--card);
   --panel2: oklch(0.131 0.009 75); /* #211f19 */
 
@@ -129,6 +130,7 @@
   --dim: oklch(0.69 0.014 85); /* #aaa493 */
   --line2: oklch(0.19 0.016 80 / 20%);
   --raise: oklch(1 0 0 / 80%);
+  --scrim: oklch(0.25 0.01 75 / 32%); /* lighter dim for the ivory theme */
   --panel2: oklch(0.99 0.008 85); /* #fffdf6 */
   --act-dim: oklch(0.47 0.12 148 / 10%);
   --idle-dim: oklch(0.52 0.13 76 / 12%);
@@ -222,11 +224,26 @@
   }
 }
 
+/* ══ Type / size / space system ══════════════════════════════════════════
+   Single source of truth for the QI atoms below. Use the Tailwind/shadcn
+   native scale — no arbitrary `text-[Npx]`, no inline fontSize, no `*-[Npx]`
+   spacing (enforced by `npm run lint`, see scripts/lint-px.mjs).
+     FONT RAMP (px floor = 12 — nothing below):
+       12  text-xs   instrument/mono micro-labels, meta, badges, kbd  (FLOOR)
+       13  mono code/args (dense monospace only)
+       14  text-sm   body + control text (shadcn default)
+       16  text-base primary reading / composer
+       18  text-lg   gauges, prominent values
+       20  text-xl / 24 text-2xl / Fraunces display via --font-display
+     CONTROL HEIGHTS (shadcn): 36px default (h-9), 32px sm (h-8).
+     SPACING: 4px grid (Tailwind p-2/p-3/p-4, gap-2/3); 6/10px only for sm controls.
+     ICONS: lucide-react at size-4 (16px) default, size-5 (20px) prominent.
+   ════════════════════════════════════════════════════════════════════════ */
 @layer components {
   /* ── .instlabel — Martian Mono micro-label ─────────────────────────── */
   .instlabel {
     font-family: var(--font-inst);
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -257,11 +274,13 @@
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    justify-content: center;
+    gap: 8px;
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
-    padding: 7px 14px;
+    min-height: 36px;
+    padding: 8px 16px;
     border-radius: 8px;
     cursor: pointer;
     white-space: nowrap;
@@ -299,15 +318,16 @@
     color: oklch(0.72 0.18 35);
   }
   .btn.sm {
-    padding: 4px 10px;
-    font-size: 12px;
-    border-radius: 7px;
+    min-height: 32px;
+    padding: 6px 12px;
+    font-size: 14px;
+    border-radius: 6px;
   }
 
   /* ── .dot — status indicator ── */
   .dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     flex: none;
   }
@@ -331,7 +351,7 @@
     align-items: center;
     gap: 7px;
     font-family: var(--font-inst);
-    font-size: 9.5px;
+    font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -369,7 +389,7 @@
   /* ── .kbd — keyboard indicator ── */
   .kbd {
     font-family: var(--font-inst);
-    font-size: 9px;
+    font-size: 12px;
     color: var(--mut);
     border: 1px solid var(--line2);
     border-bottom-width: 2px;
@@ -393,41 +413,43 @@
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     border: 1px solid var(--line);
     border-radius: 9px;
-    padding: 8px 13px;
+    min-height: 36px;
+    padding: 8px 12px;
     background: oklch(0 0 0 / 25%);
     box-shadow: inset 0 1px 3px oklch(0 0 0 / 30%);
     color: var(--dim);
-    font-size: 13px;
+    font-size: 14px;
   }
   .search .kbd { margin-left: auto; }
   .selectish {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--ink2);
     border: 1px solid var(--line);
     border-radius: 9px;
-    padding: 8px 13px;
+    min-height: 36px;
+    padding: 8px 12px;
     cursor: pointer;
     background: oklch(0.92 0.008 80 / 2%);
   }
-  .selectish .car { font-size: 9px; color: var(--mut); }
+  .selectish .car { font-size: 12px; color: var(--mut); }
   .checkish {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--ink2);
     padding: 8px 4px;
     cursor: pointer;
   }
   .checkish .box {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border: 1px solid var(--line2);
     border-radius: 4px;
     background: oklch(0 0 0 / 20%);
@@ -441,13 +463,17 @@
   }
   .seg button {
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--mut);
     background: transparent;
     border: none;
-    padding: 5px 13px;
+    min-height: 32px;
+    padding: 6px 12px;
     cursor: pointer;
     transition: all 0.15s ease;
   }
@@ -460,10 +486,10 @@
   /* ── .chip ── */
   .chip {
     font-family: var(--font-inst);
-    font-size: 8px;
+    font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    padding: 2.5px 8px;
+    padding: 3px 8px;
     border-radius: 99px;
     flex: none;
   }
@@ -478,12 +504,12 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     color: oklch(0.72 0.16 35);
     background: var(--blk-dim);
     border: 1px solid oklch(0.66 0.21 33 / 35%);
-    padding: 3.5px 10px;
+    padding: 4px 10px;
     border-radius: 99px;
   }
 
@@ -493,12 +519,12 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--mut);
     border: 1px solid var(--line);
-    padding: 5px 10px;
+    padding: 6px 12px;
     border-radius: 7px;
     cursor: pointer;
   }
@@ -533,11 +559,11 @@
   }
   .fm-chip {
     font-family: var(--font-code);
-    font-size: 9.5px;
+    font-size: 12px;
     color: var(--mut);
     border: 1px solid var(--line);
     border-radius: 6px;
-    padding: 2.5px 8px;
+    padding: 3px 8px;
     background: oklch(0 0 0 / 20%);
   }
   .fm-chip b { color: var(--ink2); font-weight: 400; }
@@ -553,8 +579,8 @@
   .tool-head {
     display: flex;
     align-items: center;
-    gap: 11px;
-    padding: 9px 14px;
+    gap: 12px;
+    padding: 8px 16px;
     cursor: pointer;
     user-select: none;
     transition: background 0.15s;
@@ -570,12 +596,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--ink2);
   }
   .tool-name {
     font-family: var(--font-inst);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -583,7 +609,7 @@
   }
   .tool-arg {
     font-family: var(--font-code);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--mut);
     white-space: nowrap;
     overflow: hidden;
@@ -593,13 +619,13 @@
   }
   .tool-dur {
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     color: var(--dim);
     letter-spacing: 0.08em;
     flex: none;
   }
   .tool-head .chev {
-    font-size: 8px;
+    font-size: 12px;
     color: var(--dim);
     transition: transform 0.2s ease;
   }
@@ -613,7 +639,7 @@
   .tool.open .tool-body { display: block; }
   .tool-body pre {
     font-family: var(--font-code);
-    font-size: 11.5px;
+    font-size: 12px;
     line-height: 1.7;
     color: var(--ink2);
     white-space: pre-wrap;
@@ -625,7 +651,7 @@
   .tool-body .bullet b { color: var(--ink); font-weight: 400; }
 
   /* ══ Thinking collapsible ══ */
-  .thinking { border-left: 2px solid oklch(0.7 0.1 300 / 45%); }
+  .thinking { border-left: 2px solid color-mix(in oklch, var(--think) 55%, transparent); }
   .think-toggle {
     display: flex;
     align-items: center;
@@ -641,7 +667,7 @@
   }
   .think-toggle:hover { opacity: 1; }
   .think-toggle .chev {
-    font-size: 8px;
+    font-size: 12px;
     transition: transform 0.2s ease;
     display: inline-block;
     font-style: normal;
@@ -649,7 +675,7 @@
   .thinking.open .chev { transform: rotate(90deg); }
   .think-toggle .dur {
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     letter-spacing: 0.12em;
     color: var(--dim);
     font-style: normal;
@@ -657,7 +683,7 @@
   .think-body {
     display: none;
     padding: 2px 14px 12px;
-    font-size: 12.5px;
+    font-size: 13px;
     line-height: 1.65;
     color: var(--mut);
     font-style: italic;
@@ -677,17 +703,17 @@
   }
   .inbound .ic {
     color: var(--done);
-    font-size: 13px;
+    font-size: 14px;
     padding-top: 1px;
   }
   .inbound .body {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--ink2);
     min-width: 0;
   }
   .inbound .src {
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--done);
@@ -702,11 +728,29 @@
   }
   .inbound .ref {
     font-family: var(--font-code);
-    font-size: 10.5px;
+    font-size: 12px;
     color: var(--dim);
   }
 
+  /* ══ User input block ══ */
+  /* The "input" voice: a warm, raised, filled block with a bone left rail and
+     rounded right corners. Carries the user role by surface alone — no word
+     label (the filled warm block + bone rail is unmistakable, and reads cooler
+     against the neutral tool-card panels). */
+  .user {
+    max-width: 700px;
+    background: color-mix(in oklch, var(--bone) 9%, var(--panel));
+    border-left: 2px solid var(--bone);
+    border-radius: 0 10px 10px 0;
+    padding: 10px 16px;
+    color: var(--ink);
+  }
+
   /* ══ Assistant prose ══ */
+  /* The default "output" voice: flush on the page background, no card, full
+     reading width. The ABSENCE of a surface IS the assistant signal once the
+     user block is filled. No word label; at most a single phosphor role dot,
+     which the markup hides at the `focused` detail level. */
   .prose {
     max-width: 700px;
     font-size: 14px;
@@ -719,12 +763,11 @@
     gap: 8px;
     margin-bottom: 8px;
   }
-  .prose .role .instlabel { color: var(--dim); }
   .prose .role .rdot {
-    width: 5px;
-    height: 5px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: var(--bone);
+    background: var(--act);
   }
   .prose p { margin-bottom: 10px; }
   .prose ul { margin: 4px 0 10px 2px; list-style: none; }
@@ -765,13 +808,13 @@
   }
   .gauge .gval {
     font-family: var(--font-inst);
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 600;
     color: var(--ink);
     letter-spacing: 0.02em;
   }
   .gauge .gval .u {
-    font-size: 9.5px;
+    font-size: 12px;
     color: var(--mut);
     font-weight: 400;
     margin-left: 4px;
@@ -792,7 +835,7 @@
   }
   .gauge .gsub {
     font-family: var(--font-code);
-    font-size: 9.5px;
+    font-size: 12px;
     color: var(--dim);
     margin-top: 6px;
   }
@@ -811,7 +854,7 @@
   }
   .dial .dval {
     font-family: var(--font-inst);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--ink2);
     letter-spacing: 0.03em;
@@ -820,7 +863,7 @@
   .dial.path .dval {
     font-family: var(--font-code);
     font-weight: 400;
-    font-size: 10.5px;
+    font-size: 12px;
   }
 
   /* ══ Graph rail node (.gnode) ══ */
@@ -837,7 +880,7 @@
   }
   .gr-sec .hint {
     font-family: var(--font-inst);
-    font-size: 7.5px;
+    font-size: 12px;
     color: var(--dim);
     letter-spacing: 0.1em;
   }
@@ -845,9 +888,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 9px;
+    padding: 6px 12px;
     border-radius: 7px;
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--ink2);
     cursor: pointer;
     border: 1px solid transparent;
@@ -867,8 +910,8 @@
     box-shadow: inset 0 1px 0 var(--raise);
   }
   .gnode .gd {
-    width: 6px;
-    height: 6px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     flex: none;
   }
@@ -876,7 +919,7 @@
   .gnode .gflag {
     margin-left: auto;
     font-family: var(--font-inst);
-    font-size: 8px;
+    font-size: 12px;
     color: oklch(0.72 0.16 35);
     background: var(--blk-dim);
     border: 1px solid oklch(0.66 0.21 33 / 30%);
@@ -925,7 +968,7 @@
   }
   .deck-kind {
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: oklch(0.72 0.16 35);
@@ -935,18 +978,18 @@
   }
   .deck-meta .from {
     font-family: var(--font-code);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--mut);
   }
   .deck-meta .age {
     margin-left: auto;
     font-family: var(--font-inst);
-    font-size: 9px;
+    font-size: 12px;
     color: var(--mut);
     letter-spacing: 0.08em;
   }
   .deck-q {
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--ink);
     margin-bottom: 11px;
@@ -996,7 +1039,7 @@
     white-space: nowrap;
   }
   .node-kind {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--mut);
     white-space: nowrap;
   }
@@ -1005,11 +1048,11 @@
     align-items: center;
     gap: 10px;
     margin-top: 2px;
-    font-size: 11px;
+    font-size: 12px;
   }
   .node-cwd {
     font-family: var(--font-code);
-    font-size: 10.5px;
+    font-size: 12px;
     color: var(--dim);
     white-space: nowrap;
     overflow: hidden;
@@ -1017,7 +1060,7 @@
   }
   .node-life {
     font-family: var(--font-inst);
-    font-size: 8.5px;
+    font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--dim);
@@ -1026,7 +1069,7 @@
   .node-note {
     font-style: italic;
     color: var(--dim);
-    font-size: 11px;
+    font-size: 12px;
     flex: none;
   }
   .node-right {

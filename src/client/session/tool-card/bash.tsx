@@ -33,7 +33,7 @@ export function BashCard(props: ToolCardProps) {
           </>
         )}
         <span dangerouslySetInnerHTML={{ __html: escapeText(out) }} />
-        {inProgress && <span className="inline-block w-[7px] h-[7px] rounded-full bg-[#7fb3ff] ml-1.5 animate-pulse" />}
+        {inProgress && <span className="inline-block size-2 rounded-full bg-[#7fb3ff] ml-1.5 animate-pulse" />}
       </pre>
       <ResultImages result={props.result} />
     </ToolCardShell>

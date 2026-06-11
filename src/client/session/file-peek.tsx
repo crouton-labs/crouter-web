@@ -24,15 +24,15 @@ type Mode = 'pretty' | 'raw';
 
 /** `.md` body styling — serif h1, square-bullet list, bold ink emphasis. */
 const MD_CLASSES = [
-  '[&_h1]:font-[family-name:var(--font-serif)] [&_h1]:text-[20px] [&_h1]:font-medium [&_h1]:leading-[1.3] [&_h1]:mb-4 [&_h1]:text-[var(--ink)]',
-  '[&_h2]:font-[family-name:var(--font-serif)] [&_h2]:text-[16px] [&_h2]:font-medium [&_h2]:mb-3 [&_h2]:mt-4 [&_h2]:text-[var(--ink)]',
-  '[&_p]:text-[12.5px] [&_p]:leading-[1.65] [&_p]:text-[var(--ink2)] [&_p]:mb-3',
+  '[&_h1]:font-[family-name:var(--font-serif)] [&_h1]:text-xl [&_h1]:font-medium [&_h1]:leading-[1.3] [&_h1]:mb-4 [&_h1]:text-[var(--ink)]',
+  '[&_h2]:font-[family-name:var(--font-serif)] [&_h2]:text-base [&_h2]:font-medium [&_h2]:mb-3 [&_h2]:mt-4 [&_h2]:text-[var(--ink)]',
+  '[&_p]:text-xs [&_p]:leading-[1.65] [&_p]:text-[var(--ink2)] [&_p]:mb-3',
   '[&_ul]:list-none [&_ol]:list-none',
-  '[&_li]:relative [&_li]:pl-5 [&_li]:pb-[14px] [&_li]:text-[12.5px] [&_li]:leading-[1.65] [&_li]:text-[var(--ink2)]',
-  "[&_li]:before:content-[''] [&_li]:before:absolute [&_li]:before:left-[2px] [&_li]:before:top-[8px] [&_li]:before:w-[6px] [&_li]:before:h-[6px] [&_li]:before:border [&_li]:before:border-[var(--mut)] [&_li]:before:rounded-[2px] [&_li]:before:rotate-45",
+  '[&_li]:relative [&_li]:pl-5 [&_li]:pb-3.5 [&_li]:text-xs [&_li]:leading-[1.65] [&_li]:text-[var(--ink2)]',
+  "[&_li]:before:content-[''] [&_li]:before:absolute [&_li]:before:left-[2px] [&_li]:before:top-[8px] [&_li]:before:size-1.5 [&_li]:before:border [&_li]:before:border-[var(--mut)] [&_li]:before:rounded-[2px] [&_li]:before:rotate-45",
   '[&_b]:text-[var(--ink)] [&_b]:font-semibold [&_strong]:text-[var(--ink)] [&_strong]:font-semibold',
-  '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-[oklch(0_0_0/0.28)] [&_pre]:text-[11.5px]',
-  '[&_code]:font-mono [&_code]:text-[11.5px]',
+  '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-[oklch(0_0_0/0.28)] [&_pre]:text-xs',
+  '[&_code]:font-mono [&_code]:text-xs',
   '[&_a]:text-[var(--bone)] [&_a]:underline [&_a]:decoration-dotted',
 ].join(' ');
 
@@ -73,21 +73,21 @@ export function FilePeek({ nodeId, path, onClose }: FilePeekProps) {
 
   return (
     <div
-      className="relative z-[1] flex h-full w-[344px] shrink-0 flex-col border-l border-[var(--line)] bg-[linear-gradient(180deg,var(--panel2),var(--panel))] shadow-[inset_1px_0_0_var(--raise)]"
+      className="relative z-[1] flex h-full w-[21.5rem] shrink-0 flex-col border-l border-[var(--line)] bg-[linear-gradient(180deg,var(--panel2),var(--panel))] shadow-[inset_1px_0_0_var(--raise)]"
     >
       {/* Header */}
-      <div className="flex items-center gap-[9px] px-[14px] py-[11px] border-b border-[var(--line)]">
-        <span className="text-[11px] text-[var(--done)] shrink-0">◆</span>
+      <div className="flex items-center gap-2 px-3.5 py-3 border-b border-[var(--line)]">
+        <span className="text-xs text-[var(--done)] shrink-0">◆</span>
         {/* rtl truncation shows the filename end */}
         <span
-          className="font-mono text-[10.5px] text-[var(--ink2)] flex-1 truncate"
+          className="font-mono text-xs text-[var(--ink2)] flex-1 truncate"
           style={{ direction: 'rtl', textAlign: 'left', unicodeBidi: 'plaintext' }}
           title={path}
         >
           {path}
         </span>
         {/* Pretty/Raw/Close act buttons */}
-        <div className="flex gap-[5px] shrink-0">
+        <div className="flex gap-1.5 shrink-0">
           <PeekActButton on={mode === 'pretty'} onClick={() => setMode('pretty')}>Pretty</PeekActButton>
           <PeekActButton on={mode === 'raw'} onClick={() => setMode('raw')}>Raw</PeekActButton>
           <PeekActButton onClick={onClose} aria-label="Close file peek">✕</PeekActButton>
@@ -95,7 +95,7 @@ export function FilePeek({ nodeId, path, onClose }: FilePeekProps) {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto px-[20px] py-[20px]">
+      <div className="flex-1 overflow-auto px-5 py-5">
         {loading && (
           <div className="flex items-center justify-center h-16 text-[var(--dim)] text-xs">
             <span className="animate-pulse">Loading…</span>
@@ -105,12 +105,12 @@ export function FilePeek({ nodeId, path, onClose }: FilePeekProps) {
         {data && !loading && (
           <>
             {data.truncated && (
-              <div className="mb-3 text-[10px] text-[var(--dim)]">
+              <div className="mb-3 text-xs text-[var(--dim)]">
                 File truncated — showing partial content
               </div>
             )}
             {mode === 'raw' ? (
-              <pre className="text-[11.5px] font-mono text-[var(--ink2)] whitespace-pre-wrap break-all leading-[1.7]">{data.content}</pre>
+              <pre className="text-xs font-mono text-[var(--ink2)] whitespace-pre-wrap break-all leading-[1.7]">{data.content}</pre>
             ) : (
               <PrettyView content={data.content} />
             )}
@@ -119,7 +119,7 @@ export function FilePeek({ nodeId, path, onClose }: FilePeekProps) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center gap-2 border-t border-[var(--line)] px-[14px] py-[10px] text-[11px] text-[var(--dim)]">
+      <div className="flex items-center gap-2 border-t border-[var(--line)] px-3.5 py-2.5 text-xs text-[var(--dim)]">
         any file path in the stream opens here
         <span className="kbd ml-auto">esc</span>
       </div>
@@ -142,7 +142,7 @@ function PeekActButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'font-[family-name:var(--font-inst)] text-[8px] tracking-[0.1em] uppercase rounded-[6px] px-[8px] py-[3px] border transition-all duration-[0.12s] cursor-pointer',
+        'font-[family-name:var(--font-inst)] text-xs tracking-[0.1em] uppercase rounded-md px-2 py-1 border transition-all duration-[0.12s] cursor-pointer',
         on
           ? 'text-[var(--bone-ink)] bg-[var(--bone)] border-[var(--bone)]'
           : 'text-[var(--mut)] bg-transparent border-[var(--line)] hover:text-[var(--ink)] hover:border-[var(--line2)]',

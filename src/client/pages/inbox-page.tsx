@@ -27,9 +27,9 @@ export function InboxPage() {
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <h1
+          className="text-3xl"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: '28px',
             fontWeight: 460,
             letterSpacing: '-0.01em',
             color: 'var(--ink)',
@@ -39,9 +39,9 @@ export function InboxPage() {
         </h1>
         {decks.length > 0 && (
           <span
+            className="text-xs"
             style={{
               fontFamily: 'var(--font-inst)',
-              fontSize: '9px',
               fontWeight: 600,
               color: '#ff8260',
               background: 'var(--blk-dim)',
@@ -94,10 +94,10 @@ function DeckRow({ deck }: { deck: DeckSummary }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
-            <span className="truncate" style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--ink)' }}>
+            <span className="truncate text-sm" style={{ fontWeight: 500, color: 'var(--ink)' }}>
               {deck.title}
             </span>
-            <span className="instlabel shrink-0" style={{ fontSize: '8.5px' }}>
+            <span className="instlabel shrink-0">
               {meta.label}
             </span>
           </div>
@@ -107,8 +107,8 @@ function DeckRow({ deck }: { deck: DeckSummary }) {
           <DeckProvenance deck={deck} className="mt-1.5" />
         </div>
         <span
-          className="shrink-0"
-          style={{ fontFamily: 'var(--font-inst)', fontSize: '9px', letterSpacing: '0.08em', color: 'var(--mut)' }}
+          className="shrink-0 text-xs"
+          style={{ fontFamily: 'var(--font-inst)', letterSpacing: '0.08em', color: 'var(--mut)' }}
           title={`waiting ${waitedFor(deck.blocked_since)}`}
         >
           {waitedFor(deck.blocked_since)}
@@ -157,7 +157,7 @@ export function DeckProvenance({ deck, className }: { deck: DeckSummary; classNa
 function InboxZero() {
   return (
     <div className="flex h-full flex-col items-center justify-center py-16 text-center">
-      <p style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: '22px', color: 'var(--ink)' }}>
+      <p className="text-2xl" style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', color: 'var(--ink)' }}>
         You&apos;re all caught up.
       </p>
       <p className="mt-1.5 text-sm" style={{ color: 'var(--mut)' }}>

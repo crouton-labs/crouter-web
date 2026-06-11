@@ -108,7 +108,7 @@ export function DeckPage({ deckId }: { deckId: string }) {
           <Icon className="size-5" />
         </span>
         <div className="min-w-0">
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 460, letterSpacing: '-0.01em', color: 'var(--ink)' }}>{deck.title}</h1>
+          <h1 className="text-2xl" style={{ fontFamily: 'var(--font-display)', fontWeight: 460, letterSpacing: '-0.01em', color: 'var(--ink)' }}>{deck.title}</h1>
           {deck.subtitle && <p className="mt-0.5 text-sm" style={{ color: 'var(--mut)' }}>{deck.subtitle}</p>}
           <DeckProvenance deck={deck} className="mt-2" />
         </div>

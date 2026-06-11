@@ -28,12 +28,12 @@ export function EditCard(props: ToolCardProps) {
     <ToolCardShell call={props.call} subtitle={callSubtitle(props.call)} inProgress={props.inProgress} isError={isError}>
       {(oldS || newS)
         ? (
-          <div className="m-0 font-mono text-xs overflow-auto max-h-[460px]">
+          <div className="m-0 font-mono text-xs overflow-auto max-h-[28rem]">
             {diff.map((ln, i) => (
               <div
                 key={i}
                 className={cn(
-                  'px-[11px] whitespace-pre-wrap',
+                  'px-3 whitespace-pre-wrap',
                   ln.kind === 'add' && 'bg-[rgba(46,160,67,0.18)] text-[#aef0bf]',
                   ln.kind === 'del' && 'bg-[rgba(192,57,43,0.18)] text-[#ffb4ab]',
                   ln.kind === 'ctx' && 'opacity-70',

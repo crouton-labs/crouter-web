@@ -33,7 +33,7 @@ export function Presence(props: { store: PresenceStore }): ReactNode {
   return (
     <Fragment>
       <div
-        className="ctl-state flex shrink-0 items-center gap-[7px] text-[12px]"
+        className="ctl-state flex shrink-0 items-center gap-1.5 text-xs"
         style={{ color: 'var(--mut)' }}
       >
         control:{' '}

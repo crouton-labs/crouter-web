@@ -33,7 +33,7 @@ export function ProfileSwitcher() {
             aria-pressed={selected}
             onClick={() => setProfile(id)}
             className={cn(
-              'rounded px-2.5 py-1 font-medium transition-colors',
+              'inline-flex h-8 items-center rounded px-3 font-medium transition-colors',
               selected
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground',

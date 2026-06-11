@@ -55,7 +55,7 @@ function BarListBlock({
     <div className="panel" style={{ padding: '18px 20px 16px' }}>
       {/* chart-cap */}
       <div className="flex items-baseline" style={{ gap: '10px', marginBottom: '18px' }}>
-        <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)' }}>{title}</span>
+        <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{title}</span>
       </div>
 
       {/* bars */}
@@ -71,12 +71,12 @@ function BarListBlock({
             >
               {/* label */}
               <span
-                className="truncate"
-                style={{ fontSize: '12px', color: 'var(--ink2)' }}
+                className="truncate text-xs"
+                style={{ color: 'var(--ink2)' }}
               >
                 {row.label}
                 {row.note && (
-                  <em style={{ fontStyle: 'normal', color: 'var(--dim)', fontSize: '10.5px', marginLeft: '6px' }}>
+                  <em className="text-xs" style={{ fontStyle: 'normal', color: 'var(--dim)', marginLeft: '6px' }}>
                     {row.note}
                   </em>
                 )}
@@ -105,10 +105,9 @@ function BarListBlock({
 
               {/* value */}
               <span
-                className="tabular-nums"
+                className="tabular-nums text-xs"
                 style={{
                   fontFamily: 'var(--font-inst)',
-                  fontSize: '10px',
                   textAlign: 'right',
                   color: top ? 'var(--act)' : 'var(--mut)',
                 }}

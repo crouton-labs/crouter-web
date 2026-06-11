@@ -16,6 +16,7 @@
     "dev:server": "tsx watch src/server/cli.ts serve",
     "dev:client": "vite",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "lint": "node scripts/lint-px.mjs",
     "test": "node --import tsx/esm --test \"src/**/__tests__/*.test.ts\"",
     "start": "node dist/server/cli.js serve"
   },

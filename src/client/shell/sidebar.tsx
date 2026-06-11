@@ -50,7 +50,7 @@ export function Sidebar({ nav }: { nav: NavItem[] }) {
 
       {hasViewsHost && (
         <>
-          <div className="instlabel mx-3 mb-0.5 mt-3 text-[10px] uppercase tracking-widest text-muted-foreground/60">
+          <div className="instlabel mx-3 mb-0.5 mt-3 uppercase tracking-widest text-muted-foreground/60">
             Views
           </div>
           {views.map((view) => (

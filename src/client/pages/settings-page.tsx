@@ -28,9 +28,9 @@ export function SettingsPage() {
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-8 overflow-auto px-6 py-8">
       <h1
+        className="text-3xl"
         style={{
           fontFamily: 'var(--font-display)',
-          fontSize: '28px',
           fontWeight: 460,
           letterSpacing: '-0.01em',
           color: 'var(--ink)',

@@ -27,8 +27,8 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
       <div className="flex h-full items-center justify-center p-8 text-center">
         <div>
           <p
-            className="text-muted-foreground"
-            style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: '22px' }}
+            className="text-2xl text-muted-foreground"
+            style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}
           >
             View not found
           </p>
@@ -50,12 +50,11 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
         {/* view-head: Fraunces italic title · provenance · switch */}
         <div className="flex items-end" style={{ gap: '18px', marginBottom: '6px' }}>
           <h1
-            className="view-title"
+            className="view-title text-4xl"
             style={{
               fontFamily: 'var(--font-display)',
               fontStyle: 'italic',
               fontWeight: 430,
-              fontSize: '36px',
               letterSpacing: '-0.01em',
               lineHeight: 1.1,
               color: 'var(--ink)',
@@ -63,11 +62,11 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
           >
             {view.title}
           </h1>
-          <div style={{ fontSize: '12px', color: 'var(--mut)', paddingBottom: '7px' }}>
+          <div className="text-xs" style={{ color: 'var(--mut)', paddingBottom: '7px' }}>
             {view.built_by ? (
               <>
                 built by{' '}
-                <span className="mono" style={{ color: 'var(--dim)', fontSize: '11px' }}>
+                <span className="mono text-xs" style={{ color: 'var(--dim)' }}>
                   {view.built_by}
                 </span>{' '}
                 · updated {relativeTime(view.updated_at)} · only you
@@ -77,8 +76,8 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
             )}
           </div>
           <div
-            className="ml-auto flex items-center"
-            style={{ gap: '9px', paddingBottom: '6px', fontSize: '11.5px', color: 'var(--mut)' }}
+            className="ml-auto flex items-center text-xs"
+            style={{ gap: '9px', paddingBottom: '6px', color: 'var(--mut)' }}
           >
             switch view <span className="kbd">⌘K</span>
           </div>
@@ -99,12 +98,10 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
                   navigate(`/views/${encodeURIComponent(view.id)}/${encodeURIComponent(t.id)}`)
                 }
                 className={cn(
-                  'transition-colors',
+                  'text-sm font-medium transition-colors',
                   isActive ? 'text-[color:var(--ink)]' : 'text-[color:var(--mut)] hover:text-[color:var(--ink2)]',
                 )}
                 style={{
-                  fontSize: '13px',
-                  fontWeight: 500,
                   padding: '9px 16px',
                   marginBottom: '-1px',
                   borderBottom: `2px solid ${isActive ? 'var(--bone)' : 'transparent'}`,
@@ -121,8 +118,8 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
 
         {/* view-foot */}
         <div
-          className="flex items-center"
-          style={{ marginTop: '14px', gap: '10px', fontSize: '11.5px', color: 'var(--dim)' }}
+          className="flex items-center text-xs"
+          style={{ marginTop: '14px', gap: '10px', color: 'var(--dim)' }}
         >
           <span
             className="instlabel"
@@ -130,7 +127,6 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
               border: '1px solid var(--line)',
               borderRadius: '99px',
               padding: '3px 11px',
-              fontSize: '8.5px',
               color: 'var(--mut)',
             }}
           >
@@ -209,7 +205,7 @@ function ChatDrawerLive({ nodeId }: { nodeId: string }): React.ReactElement {
 
   return (
     <div
-      className="flex w-[372px] shrink-0 flex-col border-l"
+      className="flex w-93 shrink-0 flex-col border-l"
       style={{
         borderColor: 'rgba(40,36,26,.1)',
         background: 'var(--card)',
@@ -218,22 +214,21 @@ function ChatDrawerLive({ nodeId }: { nodeId: string }): React.ReactElement {
     >
       {/* drawer header */}
       <div
-        className="flex shrink-0 items-center gap-2.5 border-b px-[18px] py-3.5"
+        className="flex shrink-0 items-center gap-2.5 border-b px-4.5 py-3.5"
         style={{ borderColor: 'rgba(40,36,26,.1)' }}
       >
         <span
-          className="flex-1"
+          className="flex-1 text-base"
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 500,
-            fontSize: '15px',
             color: 'var(--foreground)',
           }}
         >
           Chat
         </span>
         <span
-          className="rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-widest text-muted-foreground"
+          className="rounded-full border px-2.5 py-0.5 text-xs uppercase tracking-widest text-muted-foreground"
           style={{ fontFamily: 'var(--font-inst)', borderColor: 'var(--border)' }}
         >
           {nodeId}
@@ -243,7 +238,7 @@ function ChatDrawerLive({ nodeId }: { nodeId: string }): React.ReactElement {
       {/* message stream */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {unreachable ? (
-          <p className="px-[18px] py-5 text-sm italic text-muted-foreground/50">
+          <p className="px-4.5 py-5 text-sm italic text-muted-foreground/50">
             Node is unreachable — messages will appear when it reconnects.
           </p>
         ) : (
@@ -254,10 +249,10 @@ function ChatDrawerLive({ nodeId }: { nodeId: string }): React.ReactElement {
       </div>
 
       {/* composer footer */}
-      <div className="shrink-0 px-4 pb-[18px] pt-3.5">
+      <div className="shrink-0 px-4 pb-4.5 pt-3.5">
         <div
           className={cn(
-            'flex items-end gap-3 rounded-2xl border px-5 py-2 text-[13.5px]',
+            'flex items-end gap-3 rounded-2xl border px-5 py-2 text-sm',
             canDrive ? 'text-foreground' : 'text-muted-foreground/60',
           )}
           style={{
@@ -267,7 +262,7 @@ function ChatDrawerLive({ nodeId }: { nodeId: string }): React.ReactElement {
           }}
         >
           <textarea
-            className="flex-1 resize-none bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground/50"
+            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
             rows={1}
             disabled={!canDrive}
             placeholder="Refine this view…"

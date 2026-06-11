@@ -37,20 +37,18 @@ export function KpiCard({ item }: { item: KpiItem }): React.ReactElement {
     <div className="panel" style={{ padding: '16px 18px 14px' }}>
       <span className="instlabel">{item.label}</span>
       <div
-        className="mt-2"
+        className={`mt-2 ${txt ? 'text-lg' : 'text-xl'}`}
         style={
           txt
             ? {
                 fontFamily: 'var(--font-display)',
                 fontStyle: 'italic',
                 fontWeight: 480,
-                fontSize: '19px',
                 letterSpacing: 0,
                 color: 'var(--ink)',
               }
             : {
                 fontFamily: 'var(--font-inst)',
-                fontSize: '21px',
                 fontWeight: 600,
                 letterSpacing: '0.01em',
                 color: 'var(--ink)',
@@ -59,11 +57,11 @@ export function KpiCard({ item }: { item: KpiItem }): React.ReactElement {
       >
         {item.value}
         {item.unit && (
-          <span style={{ fontSize: '10px', color: 'var(--mut)', fontWeight: 400 }}>{item.unit}</span>
+          <span className="text-xs" style={{ color: 'var(--mut)', fontWeight: 400 }}>{item.unit}</span>
         )}
       </div>
       {item.sub && (
-        <div style={{ fontSize: '11px', color: 'var(--mut)', marginTop: '4px' }}>{item.sub}</div>
+        <div className="mt-1 text-xs" style={{ color: 'var(--mut)' }}>{item.sub}</div>
       )}
     </div>
   );

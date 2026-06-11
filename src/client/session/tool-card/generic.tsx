@@ -19,7 +19,7 @@ export function GenericCard(props: ToolCardProps) {
   const inProgress = props.inProgress;
   return (
     <ToolCardShell call={props.call} inProgress={inProgress} isError={isError}>
-      {args && <pre className="m-0 px-[11px] py-2 bg-[#11161c] font-mono text-[11.5px] whitespace-pre-wrap overflow-auto max-h-[240px] border-b border-[#222b35]">{args}</pre>}
+      {args && <pre className="m-0 px-3 py-2 bg-[#11161c] font-mono text-xs whitespace-pre-wrap overflow-auto max-h-60 border-b border-[#222b35]">{args}</pre>}
       {text && (
         <div
           className={cn(MD_CLASSES, isError && TERM_ERR)}

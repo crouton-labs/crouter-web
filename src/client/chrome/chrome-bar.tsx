@@ -11,11 +11,36 @@
  * live-only readings (context %, tool activity, stats) per F.4.
  */
 
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
+import {
+  AlertCircle,
+  Circle,
+  CircleCheck,
+  CircleSlash,
+  Loader,
+  XCircle,
+} from 'lucide-react';
 import { cn } from '@/lib/utils.js';
+import { Badge } from '@/components/ui/badge.js';
 import type { BrokerStatus, NodeDetail, SessionState } from '../../shared/protocol.js';
 import type { NodeChrome } from '../store/session-store.js';
 import { useCapability } from '../profile/provider.js';
+
+/** §5 status map — a 14px lucide glyph per live status, carried in the badge
+ *  (the con-head has no spine, so the glyph + word is the status carrier). */
+const STATUS_GLYPH: Record<string, ComponentType<{ className?: string }>> = {
+  active: Loader,
+  idle: Circle,
+  done: CircleCheck,
+  dead: CircleSlash,
+  canceled: XCircle,
+  blocked: AlertCircle,
+};
+
+function StatusGlyph({ status }: { status: string }): ReactNode {
+  const Glyph = STATUS_GLYPH[status] ?? Circle;
+  return <Glyph className={cn('!size-3.5', status === 'active' && 'animate-spin')} />;
+}
 
 /** React-compatible subset of the session store — plain values, not signal accessors. */
 export interface ChromeBarStore {
@@ -87,7 +112,7 @@ export function TitleBar(props: {
             working ? 'text-success' : 'text-muted-foreground',
           )}
         >
-          {working && <span className="size-1.5 animate-pulse rounded-full bg-success" />}
+          {working && <Loader className="size-3.5 animate-spin" />}
           {word}
         </span>
       </div>
@@ -99,23 +124,23 @@ export function TitleBar(props: {
     : null;
 
   if (!d) {
-    return <h2 className="con-title" style={CON_TITLE}>…</h2>;
+    return <h2 className={CON_TITLE}>…</h2>;
   }
 
   return (
     <>
-      <h2 className="con-title min-w-0 truncate" style={CON_TITLE} title={d.name}>
+      <h2 className={cn(CON_TITLE, 'min-w-0 truncate')} title={d.name}>
         {d.name}
       </h2>
       {pillStatus && (
-        <span className={cn('badge', pillStatus)}>
-          <span className={cn('dot', pillStatus)} />
+        <Badge className={cn('gap-1.5', pillStatus)}>
+          <StatusGlyph status={pillStatus} />
           {pillStatus}
-        </span>
+        </Badge>
       )}
       {dormant && (
         <span
-          className="font-mono text-[11px]"
+          className="font-mono text-xs"
           style={{ color: 'var(--idle)' }}
           title="dormant node — last-known values, not live"
         >
@@ -126,11 +151,8 @@ export function TitleBar(props: {
   );
 }
 
-const CON_TITLE = {
-  fontFamily: 'var(--font-display)',
-  fontWeight: 480,
-  fontSize: '21px',
-} as const;
+/** Console identity title — the loudest mark in the con-head (Fraunces, 20px). */
+const CON_TITLE = 'con-title font-display text-xl font-medium';
 
 
 /**

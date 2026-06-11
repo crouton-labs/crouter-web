@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { ChromePanel, type ChromeBarStore } from './chrome-bar.js';
 import type { NodeDetail } from '../../shared/protocol.js';
 
@@ -45,7 +46,7 @@ export function InstrumentOverlay(props: {
 
   return (
     <div
-      className="in fixed inset-0 z-50 flex items-start justify-center pt-[88px]"
+      className="in fixed inset-0 z-50 flex items-start justify-center pt-22"
       style={{ background: 'rgba(0,0,0,.42)', backdropFilter: 'blur(2px)' }}
       onMouseDown={(e) => {
         if (!panelRef.current?.contains(e.target as Node)) setOpen(false);
@@ -59,11 +60,11 @@ export function InstrumentOverlay(props: {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-[12.5px] transition-colors"
+            className="transition-colors"
             style={{ color: 'var(--mut)' }}
             aria-label="Close instruments"
           >
-            ✕
+            <X className="size-3.5" />
           </button>
         </div>
         <ChromePanel store={props.store} detail={props.detail} />

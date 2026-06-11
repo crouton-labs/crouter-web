@@ -31,7 +31,7 @@ export function ImageBlock({ image }: ImageBlockProps) {
   return (
     <img
       // .cw-img equivalent: bounded display block, rounded, contained.
-      className="block max-w-[min(100%,520px)] max-h-[420px] rounded-md my-1.5 object-contain"
+      className="block max-w-[min(100%,520px)] max-h-[26rem] rounded-md my-1.5 object-contain"
       src={src}
       alt="image content"
       loading="lazy"

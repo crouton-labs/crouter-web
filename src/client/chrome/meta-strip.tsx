@@ -5,6 +5,7 @@
  */
 
 import { Fragment, type ReactNode } from 'react';
+import { GitBranch } from 'lucide-react';
 import type { NodeDetail } from '../../shared/protocol.js';
 import type { NodeChrome } from '../store/session-store.js';
 
@@ -25,8 +26,9 @@ export function MetaStrip({ store, detail }: Props): ReactNode {
     const modified = gs?.modified ?? 0;
 
     parts.push(
-      <span key="branch">
-        ⎇ <b style={B}>{branch}</b>
+      <span key="branch" className="inline-flex items-center gap-1.5">
+        <GitBranch className="size-3.5 shrink-0 opacity-70" />
+        <b style={B}>{branch}</b>
         {added > 0 && (
           <span style={{ color: 'var(--act)', opacity: 0.8 }}> +{added}</span>
         )}
@@ -67,9 +69,8 @@ export function MetaStrip({ store, detail }: Props): ReactNode {
 
   return (
     <div
-      className="flex min-w-0 items-center gap-[20px] whitespace-nowrap border-b text-[11px]"
+      className="flex min-w-0 items-center gap-5 whitespace-nowrap border-b px-6 py-2 text-xs"
       style={{
-        padding: '8px 26px',
         borderColor: 'var(--line)',
         background: 'rgba(0,0,0,.18)',
         fontFamily: 'var(--font-code)',

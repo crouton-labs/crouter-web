@@ -23,9 +23,9 @@ export function GrepCard(props: ToolCardProps) {
     <ToolCardShell call={props.call} subtitle={pat} inProgress={inProgress} isError={props.isError}>
       {lines.length > 0
         ? (
-          <div className="m-0 font-mono text-xs overflow-auto max-h-[460px]">
+          <div className="m-0 font-mono text-xs overflow-auto max-h-[28rem]">
             {lines.map((l, i) => (
-              <div key={i} className="px-[11px] py-1 font-mono text-xs opacity-85" dangerouslySetInnerHTML={{ __html: escapeText(l) }} />
+              <div key={i} className="px-3 py-1 font-mono text-xs opacity-85" dangerouslySetInnerHTML={{ __html: escapeText(l) }} />
             ))}
           </div>
         )
