@@ -18,6 +18,8 @@ import type { Capability } from '../profile/types.js';
 import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } from '../api/rest.js';
 import { useSessionStore, type SessionStore } from '../store/session-store.js';
 import { TitleBar, ChromePanel } from '../chrome/chrome-bar.js';
+import { MetaStrip } from '../chrome/meta-strip.js';
+import { GraphRail } from '../session/graph-rail.js';
 import { Presence } from '../chrome/presence.js';
 import { useTerm, useGrants, useCapability, useProfile } from '../profile/provider.js';
 import { shouldResnapshot, resnapshotDelay } from '../lib/session-resnapshot.js';
@@ -58,7 +60,9 @@ type SessionSlot =
   | 'rail'
   | 'arbitration'
   | 'composer'
-  | 'trace';
+  | 'trace'
+  | 'graphRail'
+  | 'filePeek';
 
 // ---------------------------------------------------------------------------
 // NodePage (SessionScreen)
@@ -210,10 +214,17 @@ export function NodePage(props: { id: string }) {
   // closures over the page's store + handlers — the chat substrate is shared.
   const slots: SlotRegistry<SessionSlot> = {
     header: { render: () => <TitleBar store={store} detail={detail} /> },
-    chrome: { cap: 'node.internals', render: () => <ChromePanel store={store} detail={detail} /> },
+    chrome: { cap: 'node.internals', render: () => <MetaStrip store={store} detail={detail} /> },
     stream: { render: () => <MessageList messages={store.messages} streaming={streaming} /> },
     arbitration: { cap: 'node.arbitration', render: () => <Presence store={store} /> },
     rail: { cap: 'subnodes.activity', render: () => <ActivityRail rootId={props.id} /> },
+    graphRail: {
+      cap: 'node.graphRail',
+      render: () => (
+        <GraphRail currentId={props.id} onNavigate={(id) => navigate(`/nodes/${id}`)} />
+      ),
+    },
+    filePeek: { cap: 'files.peek', render: () => null },
     composer: {
       render: () =>
         dormant ? (
@@ -313,9 +324,13 @@ export function NodePage(props: { id: string }) {
           deep-linked into the Inbox for complex ones. Capability-neutral. */}
       <InlineAsks conversationId={props.id} />
 
-      <main className="min-h-0 flex-1 overflow-auto">
-        <Slot reg={slots} name="stream" />
-      </main>
+      <div className="min-h-0 flex-1 flex overflow-hidden">
+        <Slot reg={slots} name="graphRail" />
+        <main className="min-h-0 flex-1 overflow-auto">
+          <Slot reg={slots} name="stream" />
+        </main>
+        <Slot reg={slots} name="filePeek" />
+      </div>
 
       <Slot reg={slots} name="rail" />
       <Slot reg={slots} name="composer" />

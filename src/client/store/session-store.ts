@@ -17,6 +17,7 @@ import type {
   BrokerStatus,
   ContextUsage,
   DialogResponseValue,
+  GitStatus,
   ImageContent,
   Presence,
   RpcExtensionUIRequest,
@@ -38,6 +39,7 @@ export interface NodeChrome {
   context: ContextUsage | null;
   tool_calls: number | null;
   stats: SessionStatsSummary | null;
+  git_status?: GitStatus | null;
 }
 
 const EMPTY_CHROME: NodeChrome = {
@@ -47,6 +49,7 @@ const EMPTY_CHROME: NodeChrome = {
   context: null,
   tool_calls: null,
   stats: null,
+  git_status: null,
 };
 
 export interface SessionStore {
@@ -291,6 +294,7 @@ function seedChrome(msg: Extract<WsServerMsg, { type: 'snapshot' }>): NodeChrome
       assistant_messages: stats.assistantMessages,
       cost: stats.cost,
     },
+    git_status: null,
   };
 }
 
@@ -305,5 +309,6 @@ function mergeChrome(
     context: msg.context !== undefined ? msg.context : c.context,
     tool_calls: msg.tool_calls !== undefined ? msg.tool_calls : c.tool_calls,
     stats: msg.stats !== undefined ? msg.stats : c.stats,
+    git_status: msg.git_status !== undefined ? msg.git_status : c.git_status,
   };
 }

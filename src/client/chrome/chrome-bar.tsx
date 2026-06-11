@@ -103,7 +103,7 @@ export function TitleBar(props: {
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
         {d ? (
           <>
-            <span className="font-mono text-sm font-semibold truncate">{d.name}</span>
+            <span className="truncate text-[21px] font-semibold" style={{ fontFamily: 'var(--font-display, serif)' }}>{d.name}</span>
             <Chip>{d.kind}</Chip>
             <Chip>{d.mode}</Chip>
             <Chip>{d.lifecycle}</Chip>
