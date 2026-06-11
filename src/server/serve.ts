@@ -39,8 +39,11 @@ import { registerActionRoutes } from "./http/action-routes.js";
 import { registerCanvasRoutes } from "./http/canvas-routes.js";
 import { registerDeckRoutes } from "./http/deck-routes.js";
 import { registerFileRoutes } from "./http/file-routes.js";
+import { registerViewRoutes } from "./http/view-routes.js";
 import { Router, sendError } from "./http/router.js";
 import { serveStatic } from "./http/static.js";
+import { listViews, getView, inlineMarkdownSources } from "./views/view-store.js";
+import { isContained } from "./http/file-routes.js";
 import { HubRegistry } from "./session/hub-registry.js";
 import { normalizeDormantSession } from "./static-session/normalizer.js";
 import { upgrade } from "./ws/upgrade.js";
@@ -122,6 +125,11 @@ export async function serve(opts: ServeOpts): Promise<void> {
   });
   registerDeckRoutes(router, { store: deckStore });
   registerFileRoutes(router, { getNode, nodeDir });
+  registerViewRoutes(router, {
+    listViews,
+    getView,
+    inlineMarkdownSources: (view) => inlineMarkdownSources(view, isContained, nodeDir),
+  });
   registerActionRoutes(router, {
     spawnChild,
     appendInbox,

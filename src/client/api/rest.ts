@@ -27,6 +27,9 @@ import type {
   RestErrorCode,
   SpawnRequest,
   SpawnResponse,
+  ViewManifest,
+  ViewsResponse,
+  ViewDetailResponse,
 } from '../../shared/protocol.js';
 
 /** A REST failure carrying the server's structured error code + message. */
@@ -141,4 +144,16 @@ export function peekFile(nodeId: string, filePath: string): Promise<FilePeekResp
   return getJson<FilePeekResponse>(
     `/api/nodes/${encodeURIComponent(nodeId)}/file?path=${encodeURIComponent(filePath)}`,
   );
+}
+
+/** `GET /api/views` — all view manifests sorted by updated_at desc (unwraps `{views}`). */
+export async function listViews(): Promise<ViewManifest[]> {
+  const body = await getJson<ViewsResponse>('/api/views');
+  return body.views;
+}
+
+/** `GET /api/views/:id` — a single view with markdown sources inlined (unwraps `{view}`). */
+export async function getView(id: string): Promise<ViewManifest> {
+  const body = await getJson<ViewDetailResponse>(`/api/views/${encodeURIComponent(id)}`);
+  return body.view;
 }
