@@ -18,8 +18,9 @@ import type { Capability } from '../profile/types.js';
 import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } from '../net/rest.js';
 import { useSessionStore, type SessionStore } from '../store/session-store.js';
 import type { CSSProperties } from 'react';
-import { TitleBar, ChromePanel } from '../chrome/chrome-bar.js';
+import { TitleBar } from '../chrome/chrome-bar.js';
 import { MetaStrip } from '../chrome/meta-strip.js';
+import { InstrumentOverlay } from '../chrome/instrument-overlay.js';
 import { GraphRail } from '../session/graph-rail.js';
 import { Presence } from '../chrome/presence.js';
 import { useTerm, useGrants, useCapability, useProfile } from '../profile/provider.js';
@@ -66,8 +67,7 @@ type SessionSlot =
   | 'composer'
   | 'trace'
   | 'graphRail'
-  | 'filePeek'
-  | 'cluster';
+  | 'filePeek';
 
 // ---------------------------------------------------------------------------
 // NodePage (SessionScreen)
@@ -221,7 +221,6 @@ export function NodePage(props: { id: string }) {
   const slots: SlotRegistry<SessionSlot> = {
     header: { render: () => <TitleBar store={store} detail={detail} /> },
     chrome: { cap: 'node.internals', render: () => <MetaStrip store={store} detail={detail} /> },
-    cluster: { cap: 'node.internals', render: () => <ChromePanel store={store} detail={detail} /> },
     stream: { render: () => <MessageList messages={store.messages} streaming={streaming} /> },
     arbitration: { cap: 'node.arbitration', render: () => <Presence store={store} /> },
     rail: { cap: 'subnodes.activity', render: () => <ActivityRail rootId={props.id} /> },
@@ -320,9 +319,6 @@ export function NodePage(props: { id: string }) {
       <div className="rv" style={rv(2)}>
         <Slot reg={slots} name="chrome" />
       </div>
-      <div className="rv" style={rv(2)}>
-        <Slot reg={slots} name="cluster" />
-      </div>
 
       <BrokerBanner state={store.brokerStatus} dormant={dormant} />
       {contended && (
@@ -361,6 +357,12 @@ export function NodePage(props: { id: string }) {
       </div>
 
       <Slot reg={slots} name="trace" />
+
+      {/* Telemetry HUD — ⌥i toggles the floated instrument cluster (was an
+          always-on band). Internals audience only. */}
+      <Can cap="node.internals">
+        <InstrumentOverlay store={store} detail={detail} />
+      </Can>
 
       <ExtensionDialog store={store} />
     </div>

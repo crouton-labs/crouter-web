@@ -45,7 +45,7 @@ export function GraphRail({ currentId, onNavigate }: Props): ReactNode {
   if (!canRender) return null;
 
   return (
-    <aside className="graphrail rv" style={{ zIndex: 1, overflowY: 'auto' }}>
+    <aside className="graphrail rv" style={GRAPHRAIL}>
       {/* THIS GRAPH */}
       <SectionHeader label="This graph" kbdHint="⌥↑↓" />
       {thisGraph.map(({ node, depth }) => (
@@ -83,6 +83,21 @@ export function GraphRail({ currentId, onNavigate }: Props): ReactNode {
     </aside>
   );
 }
+
+// `.graphrail` carries no CSS — the column geometry lives here (mockup: 228px,
+// padding 14px 9px, right rule, faint inset background).
+const GRAPHRAIL = {
+  width: '228px',
+  flex: 'none',
+  display: 'flex',
+  flexDirection: 'column',
+  borderRight: '1px solid var(--line)',
+  background: 'rgba(0,0,0,.16)',
+  padding: '14px 9px',
+  overflowY: 'auto',
+  zIndex: 1,
+  ['--i' as string]: 2,
+} as const;
 
 function SectionHeader({ label, kbdHint }: { label: string; kbdHint?: string }): ReactNode {
   return (

@@ -5,7 +5,7 @@
  * "Release control" button for the controller.
  */
 
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { Presence as PresenceData, WebRole } from '../../shared/protocol.js';
 
 /** React-compatible subset of the session store — plain values, not signal accessors. */
@@ -28,27 +28,25 @@ export function Presence(props: { store: PresenceStore }): ReactNode {
     return presence.controller ? 'another client' : 'no one';
   };
 
+  // con-head tail (mockup): the `ctl-state` line then the control button —
+  // nothing else (no viewer count emoji).
   return (
-    <div className="ctl-state flex shrink-0 items-center gap-[10px]">
-      <span
-        className="inline-flex items-center gap-1"
-        title="connected viewers"
+    <Fragment>
+      <div
+        className="ctl-state flex shrink-0 items-center gap-[7px] text-[12px]"
         style={{ color: 'var(--mut)' }}
       >
-        👁 {presence.viewers}
-      </span>
-      <span className="inline-flex items-center gap-[5px]" style={{ color: 'var(--mut)' }}>
         control:{' '}
         <span style={{ color: 'var(--ink2)', fontStyle: 'italic' }}>{controllerLabel()}</span>
-      </span>
+      </div>
       {isController ? (
-        <button type="button" className="btn sm" onClick={() => props.store.releaseControl()}>
+        <button type="button" className="btn sm shrink-0" onClick={() => props.store.releaseControl()}>
           Release control
         </button>
       ) : (
         <button
           type="button"
-          className="btn primary sm"
+          className="btn primary sm shrink-0"
           disabled={!props.store.socketReady}
           title={props.store.socketReady ? undefined : 'connecting…'}
           onClick={() => props.store.requestControl()}
@@ -56,6 +54,6 @@ export function Presence(props: { store: PresenceStore }): ReactNode {
           Request control
         </button>
       )}
-    </div>
+    </Fragment>
   );
 }

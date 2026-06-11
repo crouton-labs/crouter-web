@@ -1,11 +1,12 @@
 /**
- * Per-node chrome, split into the two slots of the session screen (design
- * §3.3): TitleBar = identity (Fraunces name + kind/mode/lifecycle meta + status
- * badge), the `header` slot (no capability — always present); ChromePanel = the
- * instrument cluster (context-% and cost gauges + turns/msgs/tokens/tools
- * dials), the `chrome` slot (capability `node.internals`). Identity comes from
- * the page-fetched node detail; the gauges come from the session store's
- * server-pushed chrome + state (D12 — rendered, never computed from raw events).
+ * Per-node chrome. TitleBar = console identity (Fraunces name + status badge),
+ * the `header` slot of the con-head (no capability — always present); it is kept
+ * mockup-clean (no kind/mode/lifecycle meta). ChromePanel = the instrument
+ * cluster (context-% and cost gauges + turns/msgs/tokens/tools dials), now
+ * floated in the ⌥i HUD (see instrument-overlay.tsx) rather than an always-on
+ * band. Identity comes from the page-fetched node detail; the gauges come from
+ * the session store's server-pushed chrome + state (D12 — rendered, never
+ * computed from raw events).
  * A dormant view (source==='static') is marked "last-known" and omits the
  * live-only readings (context %, tool activity, stats) per F.4.
  */
@@ -17,7 +18,7 @@ import type { NodeChrome } from '../store/session-store.js';
 import { useCapability } from '../profile/provider.js';
 
 /** React-compatible subset of the session store — plain values, not signal accessors. */
-interface ChromeBarStore {
+export interface ChromeBarStore {
   chrome: NodeChrome;
   state: SessionState | null;
   source: 'broker' | 'static';
@@ -106,20 +107,6 @@ export function TitleBar(props: {
       <h2 className="con-title min-w-0 truncate" style={CON_TITLE} title={d.name}>
         {d.name}
       </h2>
-      <div
-        className="flex shrink-0 items-center gap-[13px] text-[11px]"
-        style={{ color: 'var(--mut)' }}
-      >
-        <span>
-          kind <b style={META_B}>{d.kind}</b>
-        </span>
-        <span>
-          mode <b style={META_B}>{d.mode}</b>
-        </span>
-        <span>
-          <b style={META_B}>{d.lifecycle}</b>
-        </span>
-      </div>
       {pillStatus && (
         <span className={cn('badge', pillStatus)}>
           <span className={cn('dot', pillStatus)} />
@@ -144,7 +131,7 @@ const CON_TITLE = {
   fontWeight: 480,
   fontSize: '21px',
 } as const;
-const META_B = { color: 'var(--ink2)', fontWeight: 500 } as const;
+
 
 /**
  * Instrument cluster — the `chrome` slot's richer readout (capability
@@ -261,8 +248,7 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
-/** Trim float noise from a context-usage percent (e.g. 0.87399999 → 0.874),
- *  keeping enough precision for sub-1% windows. */
+/** Context-usage percent to a single decimal (e.g. 13.347 → 13.3). */
 function fmtPercent(percent: number): string {
-  return String(Math.round(percent * 1000) / 1000);
+  return (Math.round(percent * 10) / 10).toFixed(1);
 }
