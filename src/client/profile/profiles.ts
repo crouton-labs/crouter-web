@@ -32,6 +32,9 @@ const ALL_CAPABILITIES: Capability[] = [
   'session.trace',
   'diagnostics',
   'views.author',
+  'node.graphRail',
+  'files.peek',
+  'views.host',
 ];
 
 /** Operator — admin audience, global default. Everything granted; raw terms. */
@@ -69,7 +72,7 @@ const studio: Profile = {
   // Studio withholds every admin capability EXCEPT the one consumer-facing
   // affordance it needs: a plain-language summary of the conversation's
   // sub-DAG (the ActivityRail) in place of the raw child graph.
-  grants: new Set<Capability>(['subnodes.activity']),
+  grants: new Set<Capability>(['subnodes.activity', 'views.host']),
   terms: {
     node: 'conversation',
     nodes: 'conversations',

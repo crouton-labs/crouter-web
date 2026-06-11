@@ -107,6 +107,14 @@ export interface Presence {
   controller: string | null;
 }
 
+/** Git working-tree change counts for the meta strip. */
+export interface GitStatus {
+  added: number;
+  modified: number;
+  deleted: number;
+  untracked: number;
+}
+
 /** `GET /api/nodes/:id` — `NodeSummary` plus the per-node chrome (spec §6.1). */
 export interface NodeDetail extends NodeSummary {
   branch: string | null;
@@ -118,6 +126,8 @@ export interface NodeDetail extends NodeSummary {
   presence: Presence | null;
   /** True while a broker is live; false for a dormant (last-known) view. */
   live: boolean;
+  /** Working-tree change counts for the meta strip (null when unavailable). */
+  git_status?: GitStatus | null;
 }
 
 /** A slash command in a node's palette (from the broker `get_commands` reply). */
@@ -397,6 +407,8 @@ export interface ChromeMsg {
   context?: ContextUsage | null;
   tool_calls?: number | null;
   stats?: SessionStatsSummary | null;
+  /** Working-tree change counts pushed alongside branch updates. */
+  git_status?: GitStatus | null;
 }
 
 /** Acknowledgement of a client command (spec §6.2). */
@@ -521,4 +533,44 @@ export interface CanvasMsg {
   nodes: NodeSummary[];
   /** ISO-8601. */
   generated_at: string;
+}
+
+// ===========================================================================
+// Views — structured agent-authored pages (design D11, §7)
+// ===========================================================================
+
+/**
+ * A typed content block within a view tab. Discriminated union of three
+ * block kinds: inline/sourced markdown, a KPI grid, and a bar-list chart.
+ */
+export type ViewBlock =
+  | { kind: 'markdown'; source: { node_id: string; path: string } | { inline: string } }
+  | { kind: 'kpis'; items: { label: string; value: string; unit?: string; sub?: string }[] }
+  | { kind: 'barlist'; title: string; rows: { label: string; value: number; max?: number; note?: string }[] };
+
+/** A named tab within a view, carrying one or more content blocks. */
+export interface ViewTab {
+  id: string;
+  label: string;
+  blocks: ViewBlock[];
+}
+
+/** Full view manifest — the root record for an agent-authored view. */
+export interface ViewManifest {
+  id: string;
+  title: string;
+  built_by: string | null;
+  updated_at: string;
+  status?: NodeLifeStatus;
+  tabs: ViewTab[];
+}
+
+/** `GET /api/views` body. */
+export interface ViewsResponse {
+  views: ViewManifest[];
+}
+
+/** `GET /api/views/:id` body. */
+export interface ViewDetailResponse {
+  view: ViewManifest;
 }

@@ -22,7 +22,10 @@ export type Capability =
   | 'commands.palette' // the slash-command palette
   | 'session.trace' // raw engine-event / tool-arg inspector
   | 'diagnostics' // presence counts, broker banners, timings
-  | 'views.author'; // create/edit views vs. only run them
+  | 'views.author' // create/edit views vs. only run them
+  | 'node.graphRail' // side-rail showing peer nodes on the same graph
+  | 'files.peek' // inline file-peek panel in the node console
+  | 'views.host'; // views tab / view-host surface
 
 /** Every machine term a consumer audience overrides. Operator speaks the raw
  *  vocabulary; Studio renders friendly words (or nothing, for terms like

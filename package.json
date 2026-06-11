@@ -29,6 +29,10 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@fontsource-variable/fraunces": "^5.2.9",
+    "@fontsource-variable/instrument-sans": "^5.2.8",
+    "@fontsource-variable/martian-mono": "^5.2.7",
+    "@fontsource/fragment-mono": "^5.2.8",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-virtual": "^3.13.0",
     "@types/markdown-it": "^14.1.2",
