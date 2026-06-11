@@ -78,9 +78,10 @@ export function MessageView({ message, isLastAssistant, streaming, resultFor }: 
 
 function UserView({ message }: { message: UserMessage }) {
   const content = message.content;
+  // The user "input" voice: warm filled `.user` block + bone left rail. Role is
+  // carried by surface alone — no word label.
   return (
-    <div className="bg-secondary rounded-lg px-3 py-2">
-      <div className="text-[11px] uppercase tracking-[0.06em] opacity-55 mb-1">user</div>
+    <div className="user">
       {typeof content === 'string' ? (
         <div className="whitespace-pre-wrap">{content}</div>
       ) : (
@@ -221,7 +222,7 @@ function InboundView({ message }: { message: UserMessage }) {
         <span
           key={key++}
           onClick={(e) => { e.stopPropagation(); onPeek(path); }}
-          className={['filelink text-[10.5px]', isActive && 'peeked'].filter(Boolean).join(' ')}
+          className={['filelink text-xs', isActive && 'peeked'].filter(Boolean).join(' ')}
         >
           {path}
         </span>,

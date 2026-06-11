@@ -7,12 +7,11 @@
  * filtered from the row list here (they render inside the assistant's card).
  */
 
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FoldedMessage, ToolResultMessage } from '../../shared/protocol.js';
 import { MessageView } from './message-view.js';
-import { DensityContext, type Density } from '../lib/density-context.js';
-import { cn } from '@/lib/utils.js';
+import { useTranscriptDetail } from '../lib/transcript-detail.js';
 
 export interface MessageListProps {
   /** The folded message history. */
@@ -29,23 +28,10 @@ interface Derived {
   turnLabels: (string | null)[];
 }
 
-const DENSITY_KEY = 'crtr-density';
-
 export function MessageList({ messages, streaming }: MessageListProps) {
-  const [density, setDensityState] = useState<Density>(() => {
-    try {
-      const stored = localStorage.getItem(DENSITY_KEY);
-      if (stored === 'compact' || stored === 'full') return stored;
-    } catch {
-      // localStorage unavailable
-    }
-    return 'full';
-  });
-
-  const setDensity = (d: Density) => {
-    setDensityState(d);
-    try { localStorage.setItem(DENSITY_KEY, d); } catch { /* ignore */ }
-  };
+  // The Detail control (con-head, S2) drives the whole transcript via this
+  // global store; turn dividers go label-less in `focused`.
+  const detail = useTranscriptDetail();
 
   // Single pass over history → row list, tool-result lookup, last-assistant ref.
   const derived = useMemo<Derived>(() => {
@@ -82,6 +68,9 @@ export function MessageList({ messages, streaming }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Sticky-bottom: true while parked at (or near) the end; false when user scrolls up.
   const stuckRef = useRef(true);
+  // True while pinToBottom drives the scroll position, so onScroll doesn't
+  // mistake our own scroll events for the user scrolling away.
+  const pinningRef = useRef(false);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -91,46 +80,50 @@ export function MessageList({ messages, streaming }: MessageListProps) {
   });
 
   const onScroll = (): void => {
+    if (pinningRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
     stuckRef.current = gap < 48;
   };
 
+  // Drive scrollTop to the true bottom across several frames. One scroll isn't
+  // enough: row heights start as estimates, and as the bottom rows render and
+  // measure, scrollHeight shifts — so we re-pin until the layout settles.
+  const pinToBottom = (frames = 8): void => {
+    const el = scrollRef.current;
+    if (!el || !stuckRef.current) {
+      pinningRef.current = false;
+      return;
+    }
+    pinningRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    if (frames > 0) {
+      requestAnimationFrame(() => pinToBottom(frames - 1));
+    } else {
+      requestAnimationFrame(() => {
+        pinningRef.current = false;
+      });
+    }
+  };
+
   // Re-pin to the bottom whenever content grows or the trailing message mutates
   // (streaming deltas replace the last message object), unless the user scrolled
   // up. Tracking rows (reference changes on any mutation) + streaming covers
-  // both new-turn arrivals and in-flight delta updates.
+  // both new-turn arrivals and in-flight delta updates. Also fires on mount,
+  // so a freshly opened chat starts at the bottom.
   useEffect(() => {
     if (!stuckRef.current) return;
-    const n = rows.length;
-    if (n > 0) queueMicrotask(() => virtualizer.scrollToIndex(n - 1, { align: 'end' }));
+    if (rows.length > 0) queueMicrotask(() => pinToBottom());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, streaming]);
 
   return (
-    <DensityContext.Provider value={density}>
-      {/* Stream bar — segmented density control (Quiet Instrument) */}
-      <div className="flex items-center gap-[14px] px-[30px] pt-[18px] pb-[4px]">
-        <span className="instlabel text-[var(--dim)]">Session</span>
-        <div className="seg">
-          {(['compact', 'full'] as Density[]).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDensity(d)}
-              className={cn(density === d && 'on')}
-            >
-              {d === 'compact' ? 'Compact' : 'Full'}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div
-        ref={scrollRef}
-        className="flex flex-col flex-1 overflow-auto py-2"
-        onScroll={onScroll}
-      >
+    <div
+      ref={scrollRef}
+      className="flex flex-col flex-1 overflow-auto py-2"
+      onScroll={onScroll}
+    >
         <div
           className="relative w-full"
           style={{ height: `${virtualizer.getTotalSize()}px` }}
@@ -143,7 +136,7 @@ export function MessageList({ messages, streaming }: MessageListProps) {
                 key={vi.key}
                 data-index={vi.index}
                 ref={virtualizer.measureElement}
-                className="px-[14px] py-[6px] box-border"
+                className="px-3.5 py-1.5 box-border"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -153,11 +146,13 @@ export function MessageList({ messages, streaming }: MessageListProps) {
                 }}
               >
                 {derived.turnLabels[vi.index] && (
-                  <div className="flex items-center gap-[12px] mt-[10px] mb-[14px]">
-                    <span className="font-[family-name:var(--font-inst)] text-[8.5px] tracking-[0.16em] uppercase text-[var(--dim)]">
-                      {derived.turnLabels[vi.index]}
-                    </span>
-                    <div className="flex-1 h-px bg-[var(--line)]" />
+                  <div className="flex items-center gap-3 mt-2.5 mb-3.5">
+                    {detail !== 'focused' && (
+                      <span className="font-[family-name:var(--font-inst)] text-xs tracking-[0.16em] uppercase text-[var(--dim)]">
+                        {derived.turnLabels[vi.index]}
+                      </span>
+                    )}
+                    <div className="flex-1 h-px bg-[var(--line2)]" />
                   </div>
                 )}
                 <MessageView
@@ -171,6 +166,5 @@ export function MessageList({ messages, streaming }: MessageListProps) {
           })}
         </div>
       </div>
-    </DensityContext.Provider>
   );
 }

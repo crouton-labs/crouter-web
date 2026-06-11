@@ -9,7 +9,7 @@
  */
 
 import { type ReactNode, createContext, useContext, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
 import type {
   ToolCall,
@@ -21,7 +21,7 @@ import { ImageBlock } from '../image-block.js';
 import { useCapability } from '../../profile/provider.js';
 import { friendlyToolTitle } from './friendly-titles.js';
 import { isPeekablePath } from '../../lib/file-link.js';
-import { useDensity } from '../../lib/density-context.js';
+import { useTranscriptDetail } from '../../lib/transcript-detail.js';
 
 // ---------------------------------------------------------------------------
 // PeekContext — set at the node-page level, consumed by ToolCardShell
@@ -43,15 +43,15 @@ export function usePeek() {
 
 /** Markdown-body styling (the `.cw-md` equivalent; mirrors text-block). */
 export const MD_CLASSES =
-  '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-muted [&_code]:font-mono [&_code]:text-[12.5px] [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-[5px] [&_:not(pre)>code]:py-[1px] [&_:not(pre)>code]:rounded [&_p]:my-[0.4em] [&_a]:text-primary';
+  '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-muted [&_code]:font-mono [&_code]:text-xs [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:rounded [&_p]:my-[0.4em] [&_a]:text-primary';
 
 /** Terminal output block (`.cw-term`); pair with `TERM_ERR` via `cn` for errors. */
 export const TERM_CLASSES =
-  'm-0 px-[11px] py-[9px] bg-[#0c0f13] text-[#d6dde6] font-mono text-xs whitespace-pre-wrap overflow-auto max-h-[420px]';
+  'm-0 px-3 py-2 bg-[#0c0f13] text-[#d6dde6] font-mono text-xs whitespace-pre-wrap overflow-auto max-h-[26rem]';
 export const TERM_ERR = 'text-[#ff9b8a]';
 
 /** Italic muted placeholder (`.cw-empty`). */
-export const EMPTY_CLASSES = 'px-[11px] py-2 opacity-50 text-xs italic';
+export const EMPTY_CLASSES = 'px-3 py-2 opacity-50 text-xs italic';
 
 /**
  * Quiet Instrument tool glyph — the monogram in the `.tool-glyph` square,
@@ -143,17 +143,16 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
   const raw = useCapability('node.internals');
   const title = raw ? call.name : friendlyToolTitle(call);
 
-  const density = useDensity();
+  const detail = useTranscriptDetail();
   const { peekedPath, onPeek } = usePeek();
 
-  // In compact density, default collapsed; inProgress forces open.
-  // In full density, default expanded.
-  const defaultExpanded = inProgress || density !== 'compact';
-  const [expanded, setExpanded] = useState(defaultExpanded);
-
-  // inProgress always forces open regardless of toggle state. The `.open` class
-  // on `.tool` drives chevron rotation + `.tool-body` reveal (Phase A atom CSS).
-  const bodyVisible = inProgress || expanded;
+  // Detail level (§4) sets the auto posture: verbose = expanded; standard =
+  // collapsed but in-progress auto-expands; focused = one-line, click to open.
+  // A user toggle (null until clicked) overrides the auto posture and wins
+  // thereafter — so the con-head Detail control re-flows untouched cards live.
+  const autoExpanded = detail === 'verbose' || (detail === 'standard' && inProgress);
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const bodyVisible = userExpanded ?? autoExpanded;
 
   return (
     <div
@@ -161,9 +160,9 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
       style={isError ? { borderColor: 'var(--blk)' } : undefined}
     >
       {/* Header — clickable toggle */}
-      <div className="tool-head" onClick={() => setExpanded((v) => !v)}>
+      <div className="tool-head" onClick={() => setUserExpanded(!bodyVisible)}>
         <span className="tool-glyph">{toolGlyph(call.name)}</span>
-        <span className={cn('tool-name', !raw && 'normal-case font-sans tracking-normal text-[12px]')}>{title}</span>
+        <span className={cn('tool-name', !raw && 'normal-case font-sans tracking-normal text-xs')}>{title}</span>
         {sub && (
           <span className="tool-arg">
             {isPeekablePath(sub) ? (
@@ -199,7 +198,9 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
             <span className="chip ok">done</span>
           )}
         </span>
-        <span className="chev">▶</span>
+        <ChevronDown
+          className={cn('size-3.5 text-[var(--dim)] transition-transform', !bodyVisible && '-rotate-90')}
+        />
       </div>
       {/* Body — always in DOM; `.tool-body` CSS hides it unless `.open` is set. */}
       <div className="tool-body">{children}</div>
@@ -214,7 +215,7 @@ export function ResultImages({ result }: { result: ToolResultMessage | undefined
   return (
     <>
       {images.map((img, i) => (
-        <div key={i} className="px-[11px] py-1">
+        <div key={i} className="px-3 py-1">
           <ImageBlock image={img} />
         </div>
       ))}

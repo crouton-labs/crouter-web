@@ -9,14 +9,18 @@
  *     the sanitized HTML via dangerouslySetInnerHTML. `renderMarkdown` always
  *     returns DOMPurify-laundered HTML, so this is safe (C.8).
  *
- * Wrapped in the Quiet Instrument `.prose` atom (role dot + label, em-dash
- * bullets, paragraph rhythm). Only code/link styling is layered on top so the
- * `.prose` paragraph/list rules stay authoritative.
+ * Wrapped in the Quiet Instrument `.prose` atom (flush on the page background,
+ * em-dash bullets, paragraph rhythm). The assistant carries its role by the
+ * ABSENCE of a surface — no word label; just a single phosphor role dot that
+ * shows at `standard`+ detail and vanishes at `focused`. Only code/link styling
+ * is layered on top so the `.prose` paragraph/list rules stay authoritative.
  */
 
 import { useMemo } from 'react';
 import { renderMarkdown } from '../render/markdown.js';
 import { escapeText } from '../render/sanitize.js';
+import { useTranscriptDetail } from '../lib/transcript-detail.js';
+import { cn } from '@/lib/utils.js';
 
 export interface TextBlockProps {
   text: string;
@@ -27,10 +31,18 @@ export interface TextBlockProps {
 /** Code/link styling only — `.prose` owns paragraph + list rhythm. */
 const CODE_CLASSES = [
   '[&_pre]:overflow-auto [&_pre]:p-[10px_12px] [&_pre]:rounded-md [&_pre]:bg-[oklch(0_0_0/0.28)]',
-  '[&_code]:font-mono [&_code]:text-[12.5px]',
-  '[&_:not(pre)>code]:bg-[oklch(0_0_0/0.28)] [&_:not(pre)>code]:px-[5px] [&_:not(pre)>code]:py-[1px] [&_:not(pre)>code]:rounded',
+  '[&_code]:font-mono [&_code]:text-xs',
+  '[&_:not(pre)>code]:bg-[oklch(0_0_0/0.28)] [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:rounded',
   '[&_a]:text-[var(--bone)] [&_a]:underline [&_a]:decoration-dotted',
 ].join(' ');
+
+// Prose reading plane per Detail level (design contract §4): focused is tight
+// `text-sm`, standard is the relaxed reading default, verbose is generous.
+const LEVEL_CLASSES = {
+  focused: 'text-sm leading-snug',
+  standard: 'text-sm leading-relaxed',
+  verbose: 'text-base leading-relaxed',
+} as const;
 
 export function TextBlock({ text, inProgress }: TextBlockProps) {
   // Only recomputed when the ended text changes; never runs the markdown pass
@@ -40,12 +52,16 @@ export function TextBlock({ text, inProgress }: TextBlockProps) {
     return renderMarkdown(text ?? '');
   }, [inProgress, text]);
 
+  const detail = useTranscriptDetail();
+  const levelClass = LEVEL_CLASSES[detail];
+
   return (
-    <div className="prose">
-      <div className="role">
-        <span className="rdot" />
-        <span className="instlabel">assistant</span>
-      </div>
+    <div className={cn('prose', levelClass)}>
+      {detail !== 'focused' && (
+        <div className="role">
+          <span className="rdot" />
+        </div>
+      )}
       {inProgress ? (
         // escapeText output → dangerouslySetInnerHTML: entities render as literal
         // text; no markup can be interpreted mid-stream.
@@ -54,7 +70,7 @@ export function TextBlock({ text, inProgress }: TextBlockProps) {
           dangerouslySetInnerHTML={{ __html: escapeText(text ?? '') }}
         />
       ) : (
-        <div className={CODE_CLASSES} dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={cn(CODE_CLASSES, levelClass)} dangerouslySetInnerHTML={{ __html: html }} />
       )}
     </div>
   );
