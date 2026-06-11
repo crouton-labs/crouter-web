@@ -10,8 +10,8 @@
  * profile; it simply *is* the home a profile with this nav reaches.
  */
 
-import { useMemo, useState, type KeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCanvasStore } from '../lib/use-canvas-store.js';
 import { useServerStatus } from '../lib/server-status.js';
 import {
@@ -21,6 +21,7 @@ import {
   type ConversationState,
 } from '../lib/conversations.js';
 import { spawnNode, RestError } from '../net/rest.js';
+import { handleComposerKeyDown } from '../lib/composer-keys.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
 import { cn } from '@/lib/utils.js';
@@ -37,6 +38,17 @@ export function ConversationsPage() {
   const reachable = useServerStatus((s) => s.reachable);
   const conversations = useMemo(() => buildConversations(nodes), [nodes]);
   const [composing, setComposing] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  // The shared `startNewConversation` helper lands here with `?new` set; open
+  // the composer. We deliberately DON'T clear the flag: clearing re-renders the
+  // parent HomeRoute, and for a `views`-home audience (Studio) the second render
+  // re-fires the views redirect and unmounts this page before the composer ever
+  // shows (the M1 bug). Leaving `?new` in the URL is benign — a refresh simply
+  // re-opens the composer, and spawning/canceling navigates away from it.
+  useEffect(() => {
+    if (searchParams.get('new') !== null) setComposing(true);
+  }, [searchParams]);
 
   const showEmpty = !loading && conversations.length === 0;
 
@@ -44,9 +56,9 @@ export function ConversationsPage() {
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col px-6 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1
+          className="text-3xl"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: '28px',
             fontWeight: 460,
             letterSpacing: '-0.01em',
             color: 'var(--ink)',
@@ -121,11 +133,10 @@ function NewChatComposer({
     }
   };
 
+  // Plain Enter starts the chat; Shift+Enter and Alt/Option+Enter insert a
+  // newline (R1).
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void submit();
-    }
+    handleComposerKeyDown(e, setText, () => void submit());
   };
 
   return (
@@ -189,13 +200,18 @@ function ConversationRow({ conversation: c }: { conversation: Conversation }) {
             {c.state === 'needs-you' && (
               <span className="dot blocked shrink-0" aria-label="needs you" />
             )}
-            <span className="truncate" style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--ink)' }}>{c.title}</span>
+            <span className="truncate text-sm" style={{ fontWeight: 500, color: 'var(--ink)' }}>{c.title}</span>
           </div>
           <p className="mt-0.5 truncate text-sm" style={{ color: 'var(--mut)' }}>{previewLine(c)}</p>
         </div>
-        <span className="shrink-0" style={{ fontFamily: 'var(--font-inst)', fontSize: '9px', letterSpacing: '0.08em', color: 'var(--mut)' }}>
-          {relativeTime(c.lastActivity)}
-        </span>
+        <div
+          className="flex shrink-0 items-center gap-3 text-xs"
+          style={{ fontFamily: 'var(--font-inst)', letterSpacing: '0.04em', color: 'var(--mut)' }}
+        >
+          {c.cycles !== undefined && <span title="cycles">⟳ {c.cycles}</span>}
+          <span title="nodes in this conversation">◦ {c.nodeCount} {c.nodeCount === 1 ? 'node' : 'nodes'}</span>
+          <span title="time since last work">{relativeTime(c.lastActivity)}</span>
+        </div>
         <StatePill state={c.state} />
       </button>
     </li>

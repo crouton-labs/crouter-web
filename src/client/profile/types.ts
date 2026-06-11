@@ -54,6 +54,12 @@ export interface NavItem {
 
 export type ThemeMode = 'light' | 'dark';
 export type Density = 'comfortable' | 'compact';
+/** Where `/` lands an audience. `list` = the node/conversation list is the front
+ *  door (design R3 — switching nodes is the common act). `views` = open the
+ *  most-recent curated view first (the Studio showcase), falling back to the
+ *  list when no view exists. A composition axis like density/theme — read as
+ *  data, never gated on profile name (design §3.4). */
+export type HomeMode = 'list' | 'views';
 
 /** A named audience (design §3.2). The provider holds exactly one active
  *  Profile; it is the only place that knows `id`. */
@@ -65,4 +71,5 @@ export interface Profile {
   nav: NavItem[];
   density: Density;
   defaultTheme: ThemeMode;
+  home: HomeMode;
 }

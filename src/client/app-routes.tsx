@@ -1,14 +1,16 @@
-// SPA routes (react-router-dom v7). Routes are profile-aware via capability,
-// not profile name (design §4.4): `/` resolves to the profile's home — the
-// diagnostic Canvas for an audience that can view it, the most-recent view for
-// a `views.host` audience, else the Conversations list. `/nodes/:id` (Operator)
+// SPA routes (react-router-dom v7). Routes are profile-aware via profile data,
+// not profile name (design §4.4): `/` resolves to the profile's `home` axis —
+// the most-recent view for a `views`-home audience (Studio), else the
+// Conversations list (Operator). New chat (`/?new=1`) always opens the list +
+// composer. The diagnostic Canvas is demoted to `/canvas` (design R3).
+// `/nodes/:id` (Operator)
 // and `/c/:id` (Studio alias) both address the SAME node id and render the SAME
 // composed SessionScreen; the URL term is itself vocabulary. The global
 // ReconnectingBanner reads server-bridge connectivity from the shared zustand
 // store (spec §7 server-restart).
 
 import { useEffect } from 'react';
-import { Routes, Route, useParams, useNavigate } from 'react-router-dom';
+import { Routes, Route, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { CanvasPage } from './pages/canvas-page.js';
 import { ConversationsPage } from './pages/conversations-page.js';
 import { NodePage } from './pages/node-page.js';
@@ -16,13 +18,14 @@ import { InboxPage } from './pages/inbox-page.js';
 import { DeckPage } from './pages/deck-page.js';
 import { SettingsPage } from './pages/settings-page.js';
 import { ViewPageRoute } from './pages/view-page.js';
-import { useCapability } from './profile/provider.js';
+import { useProfile } from './profile/provider.js';
 import { useServerStatus } from './lib/server-status.js';
 import { useViews } from './lib/use-views.js';
 
 function NodePageRoute() {
   const { id } = useParams<{ id: string }>();
-  return <NodePage id={id ?? ''} />;
+  // Key by id so switching chats remounts the page (fresh scroll position etc).
+  return <NodePage key={id} id={id ?? ''} />;
 }
 
 function DeckPageRoute() {
@@ -48,16 +51,19 @@ function ViewsIndexRedirect() {
   return null;
 }
 
-/** `/` resolves to the profile's home:
- *  - `canvas.view` granted (Operator) → Canvas
- *  - `views.host` granted (Studio) → most-recent view (or Conversations if none)
- *  - else → Conversations list */
+/** `/` resolves to the profile's home. Switching between conversations is the
+ *  common act, so the node/conversation LIST is the front door for everyone
+ *  (design R3) — the diagnostic Canvas stays reachable at `/canvas` and via the
+ *  nav, but is no longer the landing surface. A `views.host` audience (Studio)
+ *  still opens views-first, falling back to the list when it has none. */
 function HomeRoute() {
-  const canViewCanvas = useCapability('canvas.view');
-  const isViewsHost = useCapability('views.host');
+  const { home } = useProfile();
+  const [params] = useSearchParams();
 
-  if (canViewCanvas) return <CanvasPage />;
-  if (isViewsHost) return <ViewsIndexRedirect />;
+  // New chat (`/?new=1`) always lands on the conversation list + composer, even
+  // for a views-first audience — otherwise the views redirect would swallow it.
+  if (params.has('new')) return <ConversationsPage />;
+  if (home === 'views') return <ViewsIndexRedirect />;
   return <ConversationsPage />;
 }
 
@@ -65,6 +71,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomeRoute />} />
+      <Route path="/canvas" element={<CanvasPage />} />
       <Route path="/nodes/:id" element={<NodePageRoute />} />
       <Route path="/c/:id" element={<NodePageRoute />} />
       <Route path="/inbox" element={<InboxPage />} />

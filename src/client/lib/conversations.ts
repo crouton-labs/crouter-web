@@ -6,11 +6,12 @@
  * count. This module is the pure mapping from a canvas snapshot to the
  * consumer-facing conversation rows; the page only renders what comes out.
  *
- * Data limits (honest, not blocked on server changes): the canvas snapshot
- * carries no per-conversation last-message text and no updated-at timestamp, so
- * the row preview is a plain-language status line (not a message excerpt) and
- * recency sorts on `created`. Both upgrade for free if the snapshot grows those
- * fields later.
+ * Data limits (honest): the canvas snapshot carries no per-conversation
+ * last-message text, so the row preview is a plain-language status line (not a
+ * message excerpt) and titles fall back from `name` to `kind · cwd-basename`
+ * (see deriveNodeTitle). Recency prefers `last_activity` and falls back to
+ * `created`. The preview/title upgrade for free if the snapshot grows a
+ * first-message field later.
  */
 
 import type { NodeLifeStatus, NodeSummary } from '../../shared/protocol.js';
@@ -26,8 +27,36 @@ export interface Conversation {
   attention: number;
   /** Count of working (active) nodes in the sub-DAG — drives the activity hint. */
   activeChildren: number;
-  /** ISO-8601; the root's creation time (recency proxy — see module note). */
+  /** Total nodes in this conversation's sub-DAG (root included). */
+  nodeCount: number;
+  /** Canvas cycle count of the root, when the snapshot carries it. */
+  cycles?: number;
+  /** ISO-8601; the root's most recent work (`last_activity`, else `created`). */
   lastActivity: string;
+}
+
+/** Last path segment of a cwd (the project basename), for fallback titles. */
+function cwdBasename(cwd: string): string {
+  if (!cwd) return '';
+  const parts = cwd.replace(/\/+$/, '').split('/');
+  return parts[parts.length - 1] ?? '';
+}
+
+/**
+ * Derive a human title for a node (design R5). The canvas snapshot carries no
+ * first-user-message text, so the auto-titled-chat ideal (truncated prompt) is
+ * not yet available; we use the best signal present:
+ *   - a meaningful `name` (i.e. one the user/runtime actually set) → use it;
+ *   - the "general general" default (`name === kind`) → `kind · <cwd-basename>`,
+ *     which at least distinguishes conversations by project instead of
+ *     repeating the kind. Upgrades to the real prompt for free once the
+ *     snapshot grows a first-message field.
+ */
+export function deriveNodeTitle(n: NodeSummary): string {
+  const name = n.name?.trim();
+  if (name && name !== n.kind) return name;
+  const base = cwdBasename(n.cwd);
+  return base ? `${n.kind} · ${base}` : n.kind;
 }
 
 /** A node is a conversation root iff it's a broker-hosted spine root. */
@@ -113,11 +142,13 @@ export function buildConversations(nodes: NodeSummary[]): Conversation[] {
     }
     convos.push({
       id: root.node_id,
-      title: root.name,
+      title: deriveNodeTitle(root),
       state: deriveState(root, attention, activeChildren),
       attention,
       activeChildren,
-      lastActivity: root.created,
+      nodeCount: dag.length,
+      ...(root.cycles !== undefined ? { cycles: root.cycles } : {}),
+      lastActivity: root.last_activity ?? root.created,
     });
   }
 

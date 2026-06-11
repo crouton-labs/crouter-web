@@ -56,13 +56,20 @@ const operator: Profile = {
     compact: 'Compact',
     close: 'Close',
   },
+  // The conversation/node LIST is the front door (design R3): it is nav[0], so
+  // `/` and the brand/back link resolve to it. The diagnostic Canvas stays one
+  // click away at `/canvas`, just no longer the landing surface.
   nav: [
-    { id: 'canvas', label: 'Canvas', path: '/' },
+    { id: 'conversations', label: 'Conversations', path: '/' },
+    { id: 'canvas', label: 'Canvas', path: '/canvas' },
     { id: 'inbox', label: 'Inbox', path: '/inbox' },
     { id: 'views', label: 'Views', path: '/views' },
   ],
   density: 'compact',
   defaultTheme: 'dark',
+  // The conversation/node list is the front door (design R3); views stay one
+  // click away at /views but are not the landing surface for the admin audience.
+  home: 'list',
 };
 
 /** Studio — consumer audience. Admin capabilities withheld; friendly terms.
@@ -95,6 +102,9 @@ const studio: Profile = {
   ],
   density: 'comfortable',
   defaultTheme: 'light',
+  // Studio is the view-centric consumer showcase — land on the curated view
+  // first, falling back to the conversation list when no view exists.
+  home: 'views',
 };
 
 export const PROFILES: Record<ProfileId, Profile> = { operator, studio };

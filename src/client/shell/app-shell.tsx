@@ -12,7 +12,7 @@
  * Gated on capability, never profile name (design §3.4).
  */
 
-import type { ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useProfile, useCapability } from '../profile/provider.js';
 import { Sidebar } from './sidebar.js';
@@ -21,6 +21,10 @@ import { OperatorDock } from './operator-dock.js';
 import { OperatorRail } from './operator-rail.js';
 import { useViews } from '../lib/use-views.js';
 import { useInboxCount } from '../lib/use-decks.js';
+import { useGlobalKeydown } from '../lib/use-global-keydown.js';
+import { startNewConversation } from '../lib/new-conversation.js';
+import { NodeSwitcher } from '../command-palette/node-switcher.js';
+import { MessagesSquare, Inbox, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
 
 /** The node-console route collapses the dock to a 58px rail (Rail Mode). */
@@ -29,7 +33,23 @@ const RAIL_ROUTE = /^\/(nodes|c)\//;
 export function AppShell({ children }: { children: ReactNode }) {
   const profile = useProfile();
   const location = useLocation();
+  const navigate = useNavigate();
   const isViewsHost = useCapability('views.host');
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+
+  // App-wide keybinds (textarea-guarded by the hook). Collision audit: ⌥I,
+  // ⌥D, '/', ⌥↑↓, Esc are taken — these two don't overlap.
+  //   ⌘/⌃⇧O → new chat (open the composer on the list home).
+  useGlobalKeydown(
+    useCallback((e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.code === 'KeyO', []),
+    useCallback(() => startNewConversation(navigate), [navigate]),
+  );
+  //   ⌘/⌃K → quick-switcher (jump between live/recent nodes).
+  useGlobalKeydown(
+    useCallback((e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyK', []),
+    useCallback(() => setSwitcherOpen((o) => !o), []),
+  );
+
   // Layout chooser (the one permitted density read): comfortable → sidebar app
   // shell; compact → the Operator left dock wraps the page outlet.
   const sidebarLayout = profile.density === 'comfortable';
@@ -37,11 +57,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const studioBar = isViewsHost && sidebarLayout;
   const home = profile.nav[0]?.path ?? '/';
 
+  const switcher = <NodeSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} />;
+
   if (studioBar) {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <StudioTopBar home={home} />
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        {switcher}
       </div>
     );
   }
@@ -58,6 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <OperatorDock nav={profile.nav} home={home} />
         )}
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        {switcher}
       </div>
     );
   }
@@ -77,6 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar nav={profile.nav} />
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
       </div>
+      {switcher}
     </div>
   );
 }
@@ -90,13 +115,13 @@ function StudioTopBar({ home }: { home: string }) {
 
   return (
     <header
-      className="flex h-[52px] shrink-0 items-center gap-0 border-b px-9"
+      className="flex h-13 shrink-0 items-center gap-0 border-b px-9"
       style={{ borderColor: 'rgba(40,36,26,.1)', background: 'var(--card)' }}
     >
       {/* brand */}
       <Link to={home} className="flex items-center gap-2 shrink-0">
         <span
-          className="flex size-[22px] items-center justify-center rounded-md text-[10px] font-bold"
+          className="flex size-5.5 items-center justify-center rounded-md text-xs font-bold"
           style={{
             fontFamily: 'var(--font-inst)',
             background: 'var(--foreground)',
@@ -106,10 +131,10 @@ function StudioTopBar({ home }: { home: string }) {
           cr
         </span>
         <span
+          className="text-lg"
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 500,
-            fontSize: '17px',
             color: 'var(--foreground)',
           }}
         >
@@ -125,7 +150,7 @@ function StudioTopBar({ home }: { home: string }) {
             to={`/views/${encodeURIComponent(view.id)}`}
             className={({ isActive }) =>
               cn(
-                'flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border px-3.5 py-[7px] text-[13.5px] font-medium transition-colors',
+                'flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border px-3.5 py-1.5 text-sm font-medium transition-colors',
                 isActive
                   ? 'border-border/50 bg-background text-foreground shadow-sm'
                   : 'border-transparent text-muted-foreground hover:bg-accent/40 hover:text-foreground',
@@ -151,15 +176,15 @@ function StudioTopBar({ home }: { home: string }) {
           </NavLink>
         ))}
 
-        {/* + new chat tab */}
+        {/* + new chat tab — routes through the shared helper (R2). */}
         <button
           type="button"
-          onClick={() => navigate('/')}
-          className="flex shrink-0 items-center rounded-lg border border-transparent px-3 py-[7px] text-[15px] text-muted-foreground/50 transition-colors hover:text-foreground"
-          title="New chat"
+          onClick={() => startNewConversation(navigate)}
+          className="flex shrink-0 items-center rounded-lg border border-transparent px-3 py-1.5 text-muted-foreground/50 transition-colors hover:text-foreground"
+          title="New chat (⌘⇧O)"
           aria-label="New chat"
         >
-          ＋
+          <Plus className="size-4" />
         </button>
       </div>
 
@@ -172,27 +197,27 @@ function StudioTopBar({ home }: { home: string }) {
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="flex size-[34px] items-center justify-center rounded-lg border text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+          className="flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:text-foreground"
           style={{ borderColor: 'rgba(40,36,26,.1)', background: 'rgba(255,255,255,.4)' }}
           title="Chats"
           aria-label="Chats"
         >
-          💬
+          <MessagesSquare className="size-4" />
         </button>
 
         {/* Inbox with badge */}
         <button
           type="button"
           onClick={() => navigate('/inbox')}
-          className="relative flex size-[34px] items-center justify-center rounded-lg border text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+          className="relative flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:text-foreground"
           style={{ borderColor: 'rgba(40,36,26,.1)', background: 'rgba(255,255,255,.4)' }}
           title="Inbox"
           aria-label="Inbox"
         >
-          ⌗
+          <Inbox className="size-4" />
           {inboxCount > 0 && (
             <span
-              className="absolute -right-1 -top-1 rounded-full bg-destructive px-1 text-[8px] font-bold text-white"
+              className="absolute -right-1 -top-1 rounded-full bg-destructive px-1 text-xs font-bold text-white"
               style={{ fontFamily: 'var(--font-inst)', minWidth: '14px', lineHeight: '14px' }}
             >
               {inboxCount}
@@ -202,7 +227,7 @@ function StudioTopBar({ home }: { home: string }) {
 
         {/* Profile placeholder */}
         <div
-          className="size-[30px] shrink-0 rounded-full border-2 border-white"
+          className="size-8 shrink-0 rounded-full border-2 border-white"
           style={{
             background: 'linear-gradient(135deg,#d8b97a,#b08b4a)',
             boxShadow: '0 2px 8px rgba(60,50,30,.25)',
