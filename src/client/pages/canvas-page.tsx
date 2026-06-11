@@ -5,6 +5,9 @@
  * shown but marked with a reason and do not navigate; enterable nodes navigate
  * to /nodes/:id. A "Spawn a node" action (B.7/G.1) posts to rest.spawnNode —
  * the new node arrives via the canvas stream.
+ *
+ * Quiet Instrument restyle (Phase 1): Fraunces header, live clock, status spine,
+ * tree connector lines, pulse animations, NeedsYouStrip triage above the forest.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -18,9 +21,7 @@ import type {
 import { RestError, spawnNode } from '../api/rest.js';
 import { useCanvasStore } from '../lib/use-canvas-store.js';
 import { cn } from '@/lib/utils.js';
-import { Badge } from '@/components/ui/badge.js';
 import { Button } from '@/components/ui/button.js';
-import { Card } from '@/components/ui/card.js';
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select.js';
 import { Textarea } from '@/components/ui/textarea.js';
+import { NeedsYouStrip } from '../canvas/needs-you-strip.js';
 
 const NON_ENTERABLE_REASON = 'hosted in a tmux pane — open it in your terminal';
 
@@ -109,31 +111,22 @@ function filterNodes(nodes: NodeSummary[], f: CanvasFilter): NodeSummary[] {
   return nodes.filter((n) => keep.has(n.node_id));
 }
 
-// ─── status color tokens ────────────────────────────────────────────────────
+// ─── status helpers ─────────────────────────────────────────────────────────
 
 const statusColor = (status: string, blocked: boolean): string =>
   `var(--status-${blocked ? 'blocked' : status})`;
 
-function StatusBadge({
-  status,
-  blocked,
-}: {
-  status: string;
-  blocked: boolean;
-}): React.ReactElement {
-  return (
-    <Badge
-      variant="outline"
-      className="gap-1.5 font-mono text-xs"
-      style={{ color: statusColor(status, blocked), borderColor: statusColor(status, blocked) + '66' }}
-    >
-      <span
-        className="size-1.5 rounded-full"
-        style={{ backgroundColor: statusColor(status, blocked) }}
-      />
-      {status}
-    </Badge>
-  );
+const DEAD_STATUSES = new Set<string>(['dead', 'canceled']);
+
+// ─── live clock ─────────────────────────────────────────────────────────────
+
+function useClock(): string {
+  const [time, setTime] = useState(() => new Date().toLocaleTimeString());
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return time;
 }
 
 // ─── page ────────────────────────────────────────────────────────────────────
@@ -141,11 +134,12 @@ function StatusBadge({
 export function CanvasPage(): React.ReactElement {
   const { nodes, generatedAt } = useCanvasStore();
   const [spawnOpen, setSpawnOpen] = useState(false);
-  // Bumped on each open so the dialog remounts with fresh form state (matches
-  // the SolidJS <Show> remount semantics; avoids a stale prefilled prompt).
   const [spawnKey, setSpawnKey] = useState(0);
   const [filter, setFilter] = useState<CanvasFilter>(EMPTY_FILTER);
   const searchRef = useRef<HTMLInputElement>(null);
+  const clock = useClock();
+
+  const activeCount = nodes.filter((n) => n.status === 'active').length;
 
   const forest = useMemo(() => buildForest(filterNodes(nodes, filter)), [nodes, filter]);
 
@@ -167,74 +161,160 @@ export function CanvasPage(): React.ReactElement {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
-        <h1 className="text-sm font-semibold">Canvas</h1>
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
-          <Input
-            ref={searchRef}
-            value={filter.query}
-            onChange={(e) => setFilter((f) => ({ ...f, query: e.currentTarget.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setFilter((f) => ({ ...f, query: '' }));
-                e.currentTarget.blur();
-              }
-            }}
-            placeholder="Search name, kind, mode, cwd, id…  (press /)"
-            aria-label="Search nodes"
-            className="h-8 pl-7 pr-7 font-mono text-xs"
-          />
-          {filter.query && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setFilter((f) => ({ ...f, query: '' }))}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground"
+    <div className="relative z-[1] flex h-full min-h-0 flex-col">
+      {/* ── canvas header ───────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 shrink-0 border-b border-border bg-background/95 px-5 py-4 backdrop-blur">
+        <div className="mb-3 flex items-end justify-between gap-4">
+          {/* title */}
+          <div>
+            <h1
+              className="leading-none tracking-tight"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '38px',
+                fontWeight: 420,
+                color: 'var(--foreground)',
+              }}
             >
-              <X className="size-3.5" />
-            </button>
-          )}
+              Canvas
+            </h1>
+            <p className="instlabel mt-1">
+              {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
+              {activeCount > 0 && ` · ${activeCount} active`}
+            </p>
+          </div>
+
+          {/* live clock */}
+          <div className="flex items-center gap-2 pb-0.5">
+            {/* pulsing active dot */}
+            <span
+              className="size-1.5 rounded-full shrink-0"
+              style={{
+                backgroundColor: 'var(--status-active)',
+                animation: 'pulse-active 2.4s ease-out infinite',
+              }}
+            />
+            <span
+              style={{
+                fontFamily: 'var(--font-inst)',
+                fontSize: '11px',
+                color: 'var(--muted-foreground)',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {clock}
+            </span>
+          </div>
         </div>
-        <Select
-          value={filter.status}
-          onValueChange={(v) =>
-            setFilter((f) => ({ ...f, status: v as NodeLifeStatus | 'all' }))
-          }
-        >
-          <SelectTrigger size="sm" className="h-8 w-[8.5rem] font-mono text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">all statuses</SelectItem>
-            {STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground select-none">
-          <input
-            type="checkbox"
-            checked={filter.blockedOnly}
-            onChange={(e) => setFilter((f) => ({ ...f, blockedOnly: e.currentTarget.checked }))}
-            className="size-3.5 rounded border border-input accent-primary"
-          />
-          blocked
-        </label>
-        {generatedAt && (
-          <span className="font-mono text-[0.7rem] text-muted-foreground/70">
-            {fmtTime(generatedAt)}
-          </span>
-        )}
-        <Button size="sm" className="h-8" onClick={() => { setSpawnKey((k) => k + 1); setSpawnOpen(true); }}>
-          Spawn a node
-        </Button>
+
+        {/* controls row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* search */}
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+            <Input
+              ref={searchRef}
+              value={filter.query}
+              onChange={(e) => setFilter((f) => ({ ...f, query: e.currentTarget.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setFilter((f) => ({ ...f, query: '' }));
+                  e.currentTarget.blur();
+                }
+              }}
+              placeholder="Search name, kind, mode, cwd, id…"
+              aria-label="Search nodes"
+              className="h-8 pl-7 pr-7 font-mono text-xs"
+            />
+            {filter.query && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setFilter((f) => ({ ...f, query: '' }))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+            {/* / kbd hint when empty */}
+            {!filter.query && (
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
+                <kbd
+                  className="rounded border border-border px-1 py-px text-muted-foreground/40"
+                  style={{ fontFamily: 'var(--font-inst)', fontSize: '9px' }}
+                >
+                  /
+                </kbd>
+              </span>
+            )}
+          </div>
+
+          {/* status filter */}
+          <Select
+            value={filter.status}
+            onValueChange={(v) =>
+              setFilter((f) => ({ ...f, status: v as NodeLifeStatus | 'all' }))
+            }
+          >
+            <SelectTrigger size="sm" className="h-8 w-[8.5rem] font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">all statuses</SelectItem>
+              {STATUS_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* blocked checkbox */}
+          <label className="flex items-center gap-1.5 select-none instlabel cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filter.blockedOnly}
+              onChange={(e) => setFilter((f) => ({ ...f, blockedOnly: e.currentTarget.checked }))}
+              className="size-3.5 rounded border border-input accent-primary"
+            />
+            blocked
+          </label>
+
+          {/* snapshot time */}
+          {generatedAt && (
+            <span
+              className="shrink-0"
+              style={{
+                fontFamily: 'var(--font-inst)',
+                fontSize: '9px',
+                color: 'var(--muted-foreground)',
+                opacity: 0.6,
+              }}
+            >
+              {fmtTime(generatedAt)}
+            </span>
+          )}
+
+          {/* spawn */}
+          <Button
+            size="sm"
+            className="h-8 shrink-0"
+            onClick={() => {
+              setSpawnKey((k) => k + 1);
+              setSpawnOpen(true);
+            }}
+          >
+            Spawn a node
+          </Button>
+        </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      {/* ── body ────────────────────────────────────────────────────────── */}
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+        {/* triage strip — renders nothing when no blocked decks */}
+        <NeedsYouStrip />
+
+        {/* forest */}
         {nodes.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">No nodes on the canvas yet.</p>
         ) : forest.length === 0 ? (
@@ -265,28 +345,46 @@ function ForestRow({
   const navigate = useNavigate();
   const node = fn.node;
   const blocked = node.attention_count > 0;
+  const dim = DEAD_STATUSES.has(node.status);
 
   const activate = (): void => {
     if (node.enterable) navigate(`/nodes/${encodeURIComponent(node.node_id)}`);
   };
 
+  const spineColor = statusColor(node.status, blocked);
+
   return (
-    <li className="list-none" style={{ paddingLeft: `${depth * 1.25}rem` }}>
+    <li className="list-none" style={{ paddingLeft: depth > 0 ? `${depth * 1.5}rem` : undefined }}>
+      {/* tree guide line + stub for children */}
       {depth > 0 && (
         <div
-          className="absolute w-px bg-border"
-          style={{ left: `${(depth - 1) * 1.25 + 0.625}rem` }}
+          className="pointer-events-none absolute"
+          style={{
+            left: `${(depth - 1) * 1.5 + 0.625}rem`,
+            top: 0,
+            bottom: 0,
+            width: '1px',
+            background: 'var(--border)',
+          }}
         />
       )}
-      <Card
+
+      {/* node row card */}
+      <div
         className={cn(
-          'relative flex flex-col gap-0 rounded-md border py-0 shadow-none transition-colors duration-100',
+          'relative flex flex-col gap-0 rounded-md border transition-colors duration-100',
           node.enterable
-            ? 'cursor-pointer hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring'
+            ? 'cursor-pointer hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
             : 'cursor-default',
-          blocked && 'bg-[--status-blocked]/5',
+          blocked && 'bg-[color:var(--status-blocked)]/5',
+          dim && 'opacity-60',
         )}
-        style={{ borderLeftColor: statusColor(node.status, blocked), borderLeftWidth: '2px' }}
+        style={{
+          background: 'var(--card)',
+          borderColor: 'var(--border)',
+          borderLeftColor: spineColor,
+          borderLeftWidth: '2px',
+        }}
         onClick={activate}
         role={node.enterable ? 'button' : undefined}
         tabIndex={node.enterable ? 0 : undefined}
@@ -294,54 +392,124 @@ function ForestRow({
           if (node.enterable && (e.key === 'Enter' || e.key === ' ')) activate();
         }}
       >
-        {/* Primary row: name · kind · mode · status */}
+        {/* primary row: name · kind · mode */}
         <div className="flex items-center gap-2 px-3 py-2">
-          <span className="font-medium text-sm min-w-0 truncate">{node.name}</span>
-          <span className="text-xs text-muted-foreground shrink-0">{node.kind}</span>
-          <span className="text-xs text-muted-foreground/60 shrink-0">{node.mode}</span>
-          <div className="ml-auto flex items-center gap-2 shrink-0">
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate text-sm font-semibold',
+              dim && 'text-muted-foreground',
+            )}
+          >
+            {node.name}
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground/70">{node.kind}</span>
+          <span className="shrink-0 text-xs text-muted-foreground/40">{node.mode}</span>
+
+          {/* right cluster */}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {/* ⚑ waiting pill */}
             {blocked && (
               <span
-                className="text-xs font-medium"
-                style={{ color: 'var(--status-blocked)' }}
-                title="blocked on a human ask"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                style={{
+                  background: 'oklch(0.66 0.21 33 / 14%)',
+                  color: 'var(--status-blocked)',
+                }}
               >
-                ⚑ {node.attention_count} waiting on human
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{
+                    backgroundColor: 'var(--status-blocked)',
+                    animation: 'pulse-blocked 1.6s ease-out infinite',
+                  }}
+                />
+                <span
+                  style={{ fontFamily: 'var(--font-inst)', fontSize: '9px', letterSpacing: '0.12em' }}
+                >
+                  ⚑ {node.attention_count} WAITING
+                </span>
               </span>
             )}
+
+            {/* status badge */}
             <StatusBadge status={node.status} blocked={blocked} />
           </div>
         </div>
 
-        {/* Secondary row: cwd · lifecycle */}
-        <div className="flex items-center justify-between gap-3 px-3 pb-1.5 border-t border-border/20">
+        {/* secondary row: cwd · lifecycle · non-enterable note */}
+        <div className="flex items-center gap-3 border-t border-border/20 px-3 pb-1.5 pt-1">
           <span
-            className="font-mono text-xs text-muted-foreground/60 min-w-0 truncate"
+            className="min-w-0 flex-1 truncate text-xs text-muted-foreground/50"
+            style={{ fontFamily: 'var(--font-code)' }}
             title={node.cwd}
           >
             {node.cwd}
           </span>
-          <span className="font-mono text-xs text-muted-foreground/40 shrink-0">
-            {node.lifecycle}
-          </span>
+          <span className="instlabel shrink-0">{node.lifecycle}</span>
+          {!node.enterable && (
+            <span className="shrink-0 text-xs italic text-muted-foreground/40">
+              {NON_ENTERABLE_REASON}
+            </span>
+          )}
         </div>
+      </div>
 
-        {/* Non-enterable notice */}
-        {!node.enterable && (
-          <div className="px-3 pb-1.5 text-xs text-muted-foreground/50 italic">
-            {NON_ENTERABLE_REASON}
-          </div>
-        )}
-      </Card>
-
+      {/* children with connector stubs */}
       {fn.children.length > 0 && (
-        <ul className="flex flex-col gap-1.5 mt-1.5 relative">
+        <ul className="relative mt-1.5 flex flex-col gap-1.5">
           {fn.children.map((child) => (
             <ForestRow key={child.node.node_id} node={child} depth={depth + 1} />
           ))}
         </ul>
       )}
     </li>
+  );
+}
+
+// ─── status badge ────────────────────────────────────────────────────────────
+
+function StatusBadge({
+  status,
+  blocked,
+}: {
+  status: string;
+  blocked: boolean;
+}): React.ReactElement {
+  const color = statusColor(status, blocked);
+  const isActive = status === 'active' && !blocked;
+  const isBlocked = blocked;
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5"
+      style={{
+        borderColor: color + '44',
+        background: color + '14',
+        color,
+      }}
+    >
+      <span
+        className="size-1.5 rounded-full"
+        style={{
+          backgroundColor: color,
+          animation: isBlocked
+            ? 'pulse-blocked 1.6s ease-out infinite'
+            : isActive
+              ? 'pulse-active 2.4s ease-out infinite'
+              : undefined,
+        }}
+      />
+      <span
+        style={{
+          fontFamily: 'var(--font-inst)',
+          fontSize: '9px',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {blocked ? 'blocked' : status}
+      </span>
+    </span>
   );
 }
 
@@ -387,6 +555,7 @@ function SpawnDialog({
       await spawnNode(req);
       onClose(); // the node surfaces via the canvas stream
     } catch (err) {
+      console.error('[spawn] failed:', err);
       setError(err instanceof RestError ? `${err.code}: ${err.message}` : String(err));
     } finally {
       setBusy(false);
@@ -426,7 +595,7 @@ function SpawnDialog({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="spawn-mode">Mode</Label>
             <Select
-              value={mode || '__none__'}
+              value={mode !== '' ? mode : '__none__'}
               onValueChange={(v) => setMode(v === '__none__' ? '' : (v as NodeMode))}
             >
               <SelectTrigger id="spawn-mode" className="w-full">
