@@ -8,8 +8,8 @@
  * WITHOUT ever dumping raw JSON as the card body.
  */
 
-import type { ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { type ReactNode, createContext, useContext, useState } from 'react';
+import { Loader2, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
 import type {
   ToolCall,
@@ -20,6 +20,26 @@ import type {
 import { ImageBlock } from '../image-block.js';
 import { useCapability } from '../../profile/provider.js';
 import { friendlyToolTitle } from './friendly-titles.js';
+import { isPeekablePath } from '../../lib/file-link.js';
+import { useDensity } from '../../lib/density-context.js';
+
+// ---------------------------------------------------------------------------
+// PeekContext — set at the node-page level, consumed by ToolCardShell
+// ---------------------------------------------------------------------------
+
+export interface PeekContextValue {
+  peekedPath: string | null;
+  onPeek: (path: string) => void;
+}
+
+export const PeekContext = createContext<PeekContextValue>({
+  peekedPath: null,
+  onPeek: () => {},
+});
+
+export function usePeek() {
+  return useContext(PeekContext);
+}
 
 /** Markdown-body styling (the `.cw-md` equivalent; mirrors text-block). */
 export const MD_CLASSES =
@@ -103,6 +123,18 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
   // Capability-driven — never branched on profile name.
   const raw = useCapability('node.internals');
   const title = raw ? call.name : friendlyToolTitle(call);
+
+  const density = useDensity();
+  const { peekedPath, onPeek } = usePeek();
+
+  // In compact density, default collapsed; inProgress forces open.
+  // In full density, default expanded.
+  const defaultExpanded = inProgress || density !== 'compact';
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  // inProgress always forces open regardless of toggle state
+  const bodyVisible = inProgress || expanded;
+
   return (
     <div
       className={cn(
@@ -110,13 +142,33 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
         isError && 'border-destructive',
       )}
     >
-      {/* Header — .cw-card-head equivalent */}
-      <div className="flex items-center gap-2 px-[10px] py-[6px] bg-muted/50 text-[12.5px]">
-        <span className={cn('font-semibold', raw && 'font-mono')}>{title}</span>
+      {/* Header — clickable toggle */}
+      <button
+        type="button"
+        className="w-full flex items-center gap-2 px-[10px] py-[6px] bg-muted/50 text-left cursor-pointer hover:bg-muted/70 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <ChevronRight
+          className={cn('size-3 shrink-0 transition-transform duration-[0.12s] text-muted-foreground/60', bodyVisible && 'rotate-90')}
+        />
+        <span className={cn('font-mono text-[11px] uppercase tracking-[0.08em] font-medium', !raw && 'font-sans normal-case tracking-normal text-[12px]')}>{title}</span>
         {sub && (
-          <span className={cn('opacity-60 text-[11.5px] overflow-hidden text-ellipsis whitespace-nowrap', raw && 'font-mono')}>
-            {sub}
-          </span>
+          isPeekablePath(sub) ? (
+            <span
+              className={cn(
+                'font-mono text-[10.5px] opacity-50 truncate cursor-pointer',
+                peekedPath === sub ? 'underline' : 'underline decoration-dotted',
+                'hover:text-[var(--bone)] hover:opacity-100',
+              )}
+              onClick={(e) => { e.stopPropagation(); onPeek(sub); }}
+            >
+              {sub}
+            </span>
+          ) : (
+            <span className={cn('font-mono text-[10.5px] opacity-50 truncate', !raw && 'font-sans')}>
+              {sub}
+            </span>
+          )
         )}
         {/* Status pill — .cw-pill-* equivalent */}
         <div className="ml-auto shrink-0">
@@ -136,9 +188,9 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
             </span>
           )}
         </div>
-      </div>
-      {/* Body slot */}
-      <div>{children}</div>
+      </button>
+      {/* Body slot — shown only when expanded or in-progress */}
+      {bodyVisible && <div>{children}</div>}
     </div>
   );
 }

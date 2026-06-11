@@ -30,6 +30,8 @@ import { ExtensionDialog } from '../dialogs/extension-dialog.js';
 import { MessageList } from '../session/message-list.js';
 import { ActivityRail } from '../session/activity-rail.js';
 import { InlineAsks } from '../session/inline-asks.js';
+import { FilePeek } from '../session/file-peek.js';
+import { PeekContext } from '../session/tool-card/parts.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
 import {
@@ -76,6 +78,7 @@ export function NodePage(props: { id: string }) {
   const [input, setInput] = useState('');
   const [reviving, setReviving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [peekedPath, setPeekedPath] = useState<string | null>(null);
 
   // --- derived liveness / capability flags ---
   const dormant = store.source === 'static';
@@ -224,7 +227,12 @@ export function NodePage(props: { id: string }) {
         <GraphRail currentId={props.id} onNavigate={(id) => navigate(`/nodes/${id}`)} />
       ),
     },
-    filePeek: { cap: 'files.peek', render: () => null },
+    filePeek: {
+      cap: 'files.peek',
+      render: () => (
+        <FilePeek nodeId={props.id} path={peekedPath} onClose={() => setPeekedPath(null)} />
+      ),
+    },
     composer: {
       render: () =>
         dormant ? (
@@ -288,6 +296,7 @@ export function NodePage(props: { id: string }) {
   };
 
   return (
+    <PeekContext.Provider value={{ peekedPath, onPeek: setPeekedPath }}>
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
         <Button variant="link" onClick={() => navigate(home.path)}>
@@ -338,6 +347,7 @@ export function NodePage(props: { id: string }) {
 
       <ExtensionDialog store={store} />
     </div>
+    </PeekContext.Provider>
   );
 }
 
