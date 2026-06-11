@@ -12,6 +12,17 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Search,
+  Flag,
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  CircleSlash,
+  XCircle,
+  AlertCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import type {
   NodeLifeStatus,
   NodeMode,
@@ -39,6 +50,7 @@ import {
   SelectValue,
 } from '@/components/ui/select.js';
 import { Textarea } from '@/components/ui/textarea.js';
+import { Badge } from '@/components/ui/badge.js';
 import { NeedsYouStrip } from '../canvas/needs-you-strip.js';
 
 /** Inline `--i` reveal-stagger var without fighting the CSSProperties type. */
@@ -117,6 +129,32 @@ function filterNodes(nodes: NodeSummary[], f: CanvasFilter): NodeSummary[] {
 
 const DEAD_STATUSES = new Set<string>(['dead', 'canceled']);
 
+/** A child subtree is "closed" when its root and every descendant are dead. */
+function isClosedSubtree(fn: ForestNode): boolean {
+  return DEAD_STATUSES.has(fn.node.status) && fn.children.every(isClosedSubtree);
+}
+
+/** Total node count in a subtree (the root plus all descendants). */
+function subtreeSize(fn: ForestNode): number {
+  return 1 + fn.children.reduce((sum, c) => sum + subtreeSize(c), 0);
+}
+
+/** Collapse a closed block behind a disclosure once it's this deep. */
+const CLOSED_COLLAPSE_THRESHOLD = 3;
+
+/** lucide status glyph (the secondary confirmation beside the spine). */
+const STATUS_ICON: Record<string, LucideIcon> = {
+  active: Circle,
+  idle: Circle,
+  done: CircleCheck,
+  dead: CircleSlash,
+  canceled: XCircle,
+};
+function statusIcon(status: string, blocked: boolean): LucideIcon {
+  if (blocked) return AlertCircle;
+  return STATUS_ICON[status] ?? Circle;
+}
+
 // ─── live clock ─────────────────────────────────────────────────────────────
 
 /** 24-hour HH:MM:SS, matching the QI mockup clock (`21:14:09`). */
@@ -170,12 +208,12 @@ export function CanvasPage(): React.ReactElement {
       style={{ padding: '34px 44px 44px' }}
     >
       {/* ── canvas head ─────────────────────────────────────────────────── */}
-      <div className="rv flex items-baseline gap-[18px]" style={rvStyle(1)}>
+      <div className="rv flex items-baseline gap-4" style={rvStyle(1)}>
         <h1
+          className="text-2xl"
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 420,
-            fontSize: '38px',
             letterSpacing: '-0.01em',
             fontVariationSettings: '"opsz" 60',
             color: 'var(--ink)',
@@ -183,26 +221,25 @@ export function CanvasPage(): React.ReactElement {
         >
           Canvas
         </h1>
-        <span style={{ color: 'var(--mut)', fontSize: '13px' }}>
+        <span className="text-sm" style={{ color: 'var(--mut)' }}>
           {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
           {activeCount > 0 && ` · ${activeCount} active`}
         </span>
 
         {/* live clock */}
         <div
-          className="flex items-center gap-[9px]"
+          className="text-xs flex items-center gap-2"
           style={{
             marginLeft: 'auto',
             fontFamily: 'var(--font-inst)',
-            fontSize: '11px',
             color: 'var(--ink2)',
             letterSpacing: '0.1em',
           }}
         >
           <span
             style={{
-              width: '6px',
-              height: '6px',
+              width: '8px',
+              height: '8px',
               borderRadius: '50%',
               background: 'var(--act)',
               animation: 'pulse 2.4s ease-out infinite',
@@ -214,12 +251,12 @@ export function CanvasPage(): React.ReactElement {
 
       {/* ── controls row ────────────────────────────────────────────────── */}
       <div
-        className="rv flex items-center gap-[10px]"
+        className="rv flex items-center gap-2.5"
         style={{ margin: '20px 0 22px', ...rvStyle(2) }}
       >
         {/* search */}
         <div className="search">
-          <span style={{ fontSize: '12px' }}>⌕</span>
+          <Search size={14} className="opacity-70" aria-hidden />
           <input
             ref={searchRef}
             value={filter.query}
@@ -232,7 +269,7 @@ export function CanvasPage(): React.ReactElement {
             }}
             placeholder="Search name, kind, mode, cwd, id…"
             aria-label="Search nodes"
-            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] outline-none"
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm outline-none"
             style={{ color: 'var(--ink)' }}
           />
           <span className="kbd">/</span>
@@ -246,7 +283,7 @@ export function CanvasPage(): React.ReactElement {
               setFilter((f) => ({ ...f, status: e.currentTarget.value as NodeLifeStatus | 'all' }))
             }
             aria-label="Filter by status"
-            className="cursor-pointer appearance-none border-0 bg-transparent text-[13px] outline-none"
+            className="cursor-pointer appearance-none border-0 bg-transparent text-sm outline-none"
             style={{ color: 'var(--ink2)', fontFamily: 'inherit' }}
           >
             <option value="all">all statuses</option>
@@ -304,10 +341,10 @@ export function CanvasPage(): React.ReactElement {
             Node forest
           </span>
           <span
+            className="text-xs"
             style={{
               marginLeft: 'auto',
               fontFamily: 'var(--font-inst)',
-              fontSize: '9px',
               color: 'var(--dim)',
               letterSpacing: '0.1em',
             }}
@@ -339,10 +376,20 @@ export function CanvasPage(): React.ReactElement {
 
 function ForestRow({ node: fn }: { node: ForestNode }): React.ReactElement {
   const navigate = useNavigate();
+  const [showClosed, setShowClosed] = useState(false);
   const node = fn.node;
   const blocked = node.attention_count > 0;
   const dim = DEAD_STATUSES.has(node.status);
   const spineStatus = blocked ? 'blocked' : node.status;
+
+  // Partition children into live (always shown) vs closed subtrees (collapsed
+  // behind a `Show N closed` disclosure once the dead block is deep enough), so
+  // a giant cancelled ladder scans as one quiet line, not endless dead rows.
+  const liveKids = fn.children.filter((c) => !isClosedSubtree(c));
+  const closedKids = fn.children.filter((c) => isClosedSubtree(c));
+  const closedCount = closedKids.reduce((sum, c) => sum + subtreeSize(c), 0);
+  const collapseClosed = closedCount >= CLOSED_COLLAPSE_THRESHOLD;
+  const inlineKids = collapseClosed ? liveKids : fn.children;
 
   const activate = (): void => {
     if (node.enterable) navigate(`/nodes/${encodeURIComponent(node.node_id)}`);
@@ -380,17 +427,43 @@ function ForestRow({ node: fn }: { node: ForestNode }): React.ReactElement {
         </div>
         <div className="node-right">
           {blocked && (
-            <span className="waitflag">⚑ {node.attention_count} waiting on human</span>
+            <span className="waitflag">
+              <Flag size={14} aria-hidden /> {node.attention_count} waiting on human
+            </span>
           )}
           <StatusBadge status={node.status} blocked={blocked} />
         </div>
       </div>
 
-      {fn.children.length > 0 && (
+      {(inlineKids.length > 0 || (collapseClosed && closedCount > 0)) && (
         <div className="kids">
-          {fn.children.map((child) => (
+          {inlineKids.map((child) => (
             <ForestRow key={child.node.node_id} node={child} />
           ))}
+          {collapseClosed && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowClosed((v) => !v)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs transition-colors"
+                style={{ color: 'var(--dim)' }}
+              >
+                <ChevronRight
+                  size={14}
+                  aria-hidden
+                  style={{
+                    transform: showClosed ? 'rotate(90deg)' : 'none',
+                    transition: 'transform 0.15s ease',
+                  }}
+                />
+                {showClosed ? `Hide ${closedCount} closed` : `Show ${closedCount} closed`}
+              </button>
+              {showClosed &&
+                closedKids.map((child) => (
+                  <ForestRow key={child.node.node_id} node={child} />
+                ))}
+            </>
+          )}
         </div>
       )}
     </>
@@ -399,8 +472,9 @@ function ForestRow({ node: fn }: { node: ForestNode }): React.ReactElement {
 
 // ─── status badge ────────────────────────────────────────────────────────────
 
-// The badge keeps the node's real lifecycle status; only the dot flips to the
-// blocked treatment (pulsing ember) when the node is waiting on a human.
+// The badge keeps the node's real lifecycle status; the leading lucide glyph
+// flips to the blocked treatment (ember alert) when waiting on a human. The
+// status word + icon carries liveness where a bare 6px dot never could.
 function StatusBadge({
   status,
   blocked,
@@ -408,11 +482,12 @@ function StatusBadge({
   status: string;
   blocked: boolean;
 }): React.ReactElement {
+  const Glyph = statusIcon(status, blocked);
   return (
-    <span className={`badge ${status}`}>
-      <span className={`dot ${blocked ? 'blocked' : status}`} />
+    <Badge variant="outline" className={blocked ? 'blocked' : status}>
+      <Glyph aria-hidden />
       {status}
-    </span>
+    </Badge>
   );
 }
 

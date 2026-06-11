@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback, Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronDown } from 'lucide-react';
 import type { Command, NodeDetail, ThinkingLevel } from '../../shared/protocol.js';
 import type { Capability } from '../profile/types.js';
 import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } from '../net/rest.js';
@@ -25,6 +26,7 @@ import { GraphRail } from '../session/graph-rail.js';
 import { Presence } from '../chrome/presence.js';
 import { useTerm, useGrants, useCapability, useProfile } from '../profile/provider.js';
 import { shouldResnapshot, resnapshotDelay } from '../lib/session-resnapshot.js';
+import { handleComposerKeyDown } from '../lib/composer-keys.js';
 import { Slot, Can, actionsFor, type SlotRegistry } from '../profile/slots.js';
 import { cn } from '@/lib/utils.js';
 import { CommandPalette } from '../command-palette/palette.js';
@@ -36,6 +38,19 @@ import { FilePeek } from '../session/file-peek.js';
 import { PeekContext } from '../session/tool-card/parts.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select.js';
+import {
+  useTranscriptDetail,
+  setTranscriptDetail,
+  cycleTranscriptDetail,
+  type TranscriptDetail,
+} from '../lib/transcript-detail.js';
 import {
   Dialog,
   DialogContent,
@@ -50,7 +65,6 @@ const THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'hi
 /** Reveal-stagger index for the `.in .rv` entrance animation. */
 const rv = (i: number): CSSProperties => ({ ['--i' as string]: i }) as CSSProperties;
 const CON_HEAD: CSSProperties = {
-  padding: '16px 30px',
   borderBottom: '1px solid var(--line)',
   background: 'linear-gradient(180deg, rgba(33,31,25,.7), rgba(20,19,16,0))',
 };
@@ -166,6 +180,20 @@ export function NodePage(props: { id: string }) {
     store.requestControl();
   }, [showArbitration, dormant, store.socketReady, brokerUp, store.role, props.id, store]);
 
+  // Alt+D cycles the transcript Detail level (Focused→Standard→Verbose→wrap),
+  // console-level so it works wherever focus is — except the composer textarea,
+  // where typing must win. Matched on `code` (layout-stable).
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (!e.altKey || e.metaKey || e.ctrlKey || e.code !== 'KeyD') return;
+      if (document.activeElement instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      cycleTranscriptDetail();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // --- input actions ---
   const sendPrimary = (): void => {
     const text = input.trim();
@@ -177,11 +205,9 @@ export function NodePage(props: { id: string }) {
     setInput('');
   };
 
+  // Plain Enter sends; Shift+Enter and Alt/Option+Enter insert a newline (R1).
   const onInputKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendPrimary();
-    }
+    handleComposerKeyDown(e, setInput, sendPrimary);
   };
 
   const selectCommand = (cmd: Command): void => {
@@ -302,18 +328,20 @@ export function NodePage(props: { id: string }) {
     <PeekContext.Provider value={{ peekedPath, onPeek: setPeekedPath }}>
     <div className="in flex h-full min-h-0 flex-col">
       <div
-        className={cn('con-head rv flex shrink-0 items-center gap-[14px]', dormant && 'opacity-80')}
+        className={cn('con-head rv flex shrink-0 items-center gap-3 px-6 py-4', dormant && 'opacity-80')}
         style={{ ...CON_HEAD, ...rv(1) }}
       >
         <button
           type="button"
           onClick={() => navigate(home.path)}
-          className="flex shrink-0 items-center gap-[7px] text-[12.5px] text-[var(--mut)] transition-colors hover:text-[var(--ink)]"
+          className="flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-[var(--ink)]"
         >
-          ← {home.label}
+          <ChevronLeft className="size-4" />
+          {home.label}
         </button>
         <Slot reg={slots} name="header" />
         <div className="flex-1" />
+        <DetailControl />
         <Slot reg={slots} name="arbitration" />
       </div>
       <div className="rv" style={rv(2)}>
@@ -367,6 +395,43 @@ export function NodePage(props: { id: string }) {
       <ExtensionDialog store={store} />
     </div>
     </PeekContext.Provider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DetailControl (design contract §4) — the renamed transcript-verbosity axis
+// ---------------------------------------------------------------------------
+
+/** Sticky con-head chrome: a compact Select labelled "Detail" driving the whole
+ *  transcript (tools + thinking + prose) via the global transcript-detail store.
+ *  Right-aligned in the con-head; Alt+D cycles it (handler lives in NodePage). */
+const DETAIL_LEVELS: { value: TranscriptDetail; label: string }[] = [
+  { value: 'focused', label: 'Focused' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'verbose', label: 'Verbose' },
+];
+
+function DetailControl(): ReactNode {
+  const detail = useTranscriptDetail();
+  return (
+    <div
+      className="flex shrink-0 items-center gap-2"
+      title="Transcript detail — Focused / Standard / Verbose  (⌥D to cycle)"
+    >
+      <span className="instlabel">Detail</span>
+      <Select value={detail} onValueChange={(v) => setTranscriptDetail(v as TranscriptDetail)}>
+        <SelectTrigger size="sm" className="text-sm" aria-label="Transcript detail">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {DETAIL_LEVELS.map((l) => (
+            <SelectItem key={l.value} value={l.value}>
+              {l.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -435,84 +500,63 @@ function DriveToolbar({
   // shows the user's pick immediately (m4).
   const [override, setOverride] = useState<ThinkingLevel | null>(null);
   const thinking: ThinkingLevel = override ?? store.state?.thinkingLevel ?? 'medium';
-  const grants = useGrants();
   const tCompact = useTerm('compact');
   const tClose = useTerm('close');
   const tNode = useTerm('node');
 
-  // The toolbar's membership is data: each control declares an optional
-  // capability and actionsFor keeps only the granted ones, in order. Operator
-  // grants everything → the full toolbar, identical to before.
-  const controls: { key: string; cap?: Capability; node: ReactNode }[] = [
-    {
-      key: 'abort',
-      node: (
-        <Button variant="secondary" disabled={!canDrive || !streaming} onClick={() => store.abort()}>
-          Abort
-        </Button>
-      ),
-    },
-    {
-      key: 'cycle',
-      node: (
-        <Button variant="secondary" disabled={!canDrive} onClick={() => store.cycleModel()}>
-          Cycle model
-        </Button>
-      ),
-    },
-    {
-      key: 'thinking',
-      node: (
-        // One `.tiny-sel` pill — CSS uppercases it to `THINKING HIGH ▾`. The
-        // native <select> sits transparent over the pill so it stays a real
-        // level picker (m4) while reading as a single instrument label.
-        <label className="tiny-sel relative" aria-disabled={!canDrive}>
-          thinking <b>{thinking}</b>
-          <span style={{ fontSize: '8px' }}>▾</span>
-          <select
-            disabled={!canDrive}
-            value={thinking}
-            onChange={(e) => {
-              const level = e.currentTarget.value as ThinkingLevel;
-              setOverride(level);
-              store.setThinkingLevel(level);
-            }}
-            aria-label="Thinking level"
-            className="absolute inset-0 cursor-pointer opacity-0"
-          >
-            {THINKING_LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-      ),
-    },
-    {
-      key: 'compact',
-      node: (
-        <Button variant="secondary" disabled={!canDrive} onClick={() => store.compact()}>
-          {tCompact}
-        </Button>
-      ),
-    },
-    {
-      key: 'close',
-      cap: 'node.lifecycle.raw',
-      node: (
-        <Button variant="destructive" onClick={onClose}>
-          {tClose} {tNode}
-        </Button>
-      ),
-    },
-  ];
-
+  // Ranked, not flat (design contract §3b): Send is the sole primary (composer
+  // footer); here the live-turn controls (Abort + thinking) lead, Cycle model /
+  // Compact are demoted to ghost, and the destructive Close node is pushed to
+  // the far right (ml-auto) so a lifecycle action never sits shoulder-to-
+  // shoulder with a formatting toggle. All controls h-8 (size-sm).
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border px-4 py-2">
-      {actionsFor(controls, grants).map((c) => (
-        <Fragment key={c.key}>{c.node}</Fragment>
-      ))}
+      {/* live-turn group */}
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={!canDrive || !streaming}
+        onClick={() => store.abort()}
+      >
+        Abort
+      </Button>
+      {/* One `.tiny-sel` pill — CSS uppercases it to `THINKING HIGH ▾`. The native
+          <select> sits transparent over the pill so it stays a real level picker
+          (m4) while reading as a single instrument label. */}
+      <label className="tiny-sel relative" aria-disabled={!canDrive}>
+        thinking <b>{thinking}</b>
+        <ChevronDown className="size-3.5" />
+        <select
+          disabled={!canDrive}
+          value={thinking}
+          onChange={(e) => {
+            const level = e.currentTarget.value as ThinkingLevel;
+            setOverride(level);
+            store.setThinkingLevel(level);
+          }}
+          aria-label="Thinking level"
+          className="absolute inset-0 cursor-pointer opacity-0"
+        >
+          {THINKING_LEVELS.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </label>
+      {/* demoted secondary controls */}
+      <Button variant="ghost" size="sm" disabled={!canDrive} onClick={() => store.cycleModel()}>
+        Cycle model
+      </Button>
+      <Button variant="ghost" size="sm" disabled={!canDrive} onClick={() => store.compact()}>
+        {tCompact}
+      </Button>
+      {/* destructive lifecycle — pulled far-right, out of misclick range */}
+      <Can cap="node.lifecycle.raw">
+        <Button variant="destructive" size="sm" className="ml-auto" onClick={onClose}>
+          {tClose} {tNode}
+        </Button>
+      </Can>
     </div>
   );
 }

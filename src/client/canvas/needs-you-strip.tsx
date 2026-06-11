@@ -7,13 +7,15 @@
  * Empty-state: renders nothing.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Flag, ArrowRight } from 'lucide-react';
 import type { DeckSummary } from '../../shared/protocol.js';
 import { useDecks } from '../lib/use-decks.js';
 import { getDeck, resolveDeck, RestError } from '../net/rest.js';
 import { DECK_KIND_META, waitedFor } from '../lib/deck-presentation.js';
 import { toast } from '../lib/toast.js';
+import { Button } from '@/components/ui/button.js';
 
 /** Inline `--i` reveal-stagger var without fighting the CSSProperties type. */
 const rvStyle = (i: number): React.CSSProperties => ({ ['--i' as string]: i }) as React.CSSProperties;
@@ -45,18 +47,31 @@ async function resolveSimple(
 
 export function NeedsYouStrip(): React.ReactElement | null {
   const { decks, loading } = useDecks();
-  if (loading || decks.length === 0) return null;
+
+  // Depth-honest triage queue: every blocked decision shown, most-recent first.
+  const queue = useMemo(
+    () =>
+      [...decks].sort(
+        (a, b) =>
+          new Date(b.blocked_since).getTime() - new Date(a.blocked_since).getTime(),
+      ),
+    [decks],
+  );
+
+  if (loading || queue.length === 0) return null;
 
   return (
     <section className="needs rv" style={rvStyle(3)}>
       <div className="needs-head">
-        <span className="flag">⚑</span>
-        <span className="instlabel">Needs you — {decks.length} blocked</span>
+        <Flag size={14} className="flag" aria-hidden />
+        <span className="instlabel">
+          Needs you — {queue.length} blocked
+        </span>
         <div className="rule" />
       </div>
 
       <div className="needs-grid">
-        {decks.map((deck) => (
+        {queue.map((deck) => (
           <DeckCard key={deck.id} deck={deck} />
         ))}
       </div>
@@ -181,62 +196,66 @@ function DeckCard({ deck }: { deck: DeckSummary }): React.ReactElement {
       <div className="deck-actions">
         {/* notify → ack */}
         {deck.kind === 'notify' && (
-          <button
+          <Button
             type="button"
-            className="btn sm"
+            variant="outline"
+            size="sm"
             disabled={busy}
             onClick={() => void handleResolve('ack')}
           >
             Got it
-          </button>
+          </Button>
         )}
 
         {/* validation → approve / reject */}
         {deck.kind === 'validation' && (
           <>
-            <button
+            <Button
               type="button"
-              className="btn sm primary"
+              size="sm"
               disabled={busy}
               onClick={() => void handleResolve('yes')}
             >
               Approve
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn sm"
+              variant="outline"
+              size="sm"
               disabled={busy}
               onClick={() => void handleResolve('no')}
             >
               Reject
-            </button>
+            </Button>
           </>
         )}
 
         {/* decision ≤3 options → inline option buttons */}
         {showDecisionButtons &&
           decisionOptions!.map((opt) => (
-            <button
+            <Button
               key={opt.id}
               type="button"
-              className="btn sm"
+              variant="outline"
+              size="sm"
               disabled={busy}
               onClick={() => void handleDecisionOption(opt.id)}
             >
               {opt.label}
-            </button>
+            </Button>
           ))}
 
-        {/* "open thread →" quiet link — always present */}
-        <button
+        {/* "open thread" quiet link — always present */}
+        <Button
           type="button"
-          className="btn sm"
+          variant="ghost"
+          size="sm"
           disabled={busy}
           onClick={() => navigate(`/inbox/${encodeURIComponent(deck.id)}`)}
-          style={{ marginLeft: 'auto', borderColor: 'transparent', color: 'var(--dim)' }}
+          style={{ marginLeft: 'auto', color: 'var(--dim)' }}
         >
-          open thread →
-        </button>
+          open thread <ArrowRight aria-hidden />
+        </Button>
       </div>
     </div>
   );
