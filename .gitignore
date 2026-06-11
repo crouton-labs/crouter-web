@@ -6,3 +6,4 @@ yalc.lock
 .DS_Store
 test/fixtures/tmp/
 verify-shots/
+.crouter/
