@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Check } from 'lucide-react';
-import type { DeckSummary } from '../../../shared/protocol.js';
+import type { DeckSummary } from '../../shared/protocol.js';
 import { useDecks } from '../lib/use-decks.js';
 import { getDeck, resolveDeck, RestError } from '../api/rest.js';
 import { DECK_KIND_META, waitedFor } from '../lib/deck-presentation.js';
