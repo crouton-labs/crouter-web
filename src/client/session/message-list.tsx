@@ -7,10 +7,12 @@
  * filtered from the row list here (they render inside the assistant's card).
  */
 
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgentMessage, ToolResultMessage } from '../../shared/protocol.js';
 import { MessageView } from './message-view.js';
+import { DensityContext, type Density } from '../lib/density-context.js';
+import { cn } from '@/lib/utils.js';
 
 export interface MessageListProps {
   /** The folded message history. */
@@ -25,7 +27,24 @@ interface Derived {
   lastAssistant: AgentMessage | undefined;
 }
 
+const DENSITY_KEY = 'crtr-density';
+
 export function MessageList({ messages, streaming }: MessageListProps) {
+  const [density, setDensityState] = useState<Density>(() => {
+    try {
+      const stored = localStorage.getItem(DENSITY_KEY);
+      if (stored === 'compact' || stored === 'full') return stored;
+    } catch {
+      // localStorage unavailable
+    }
+    return 'full';
+  });
+
+  const setDensity = (d: Density) => {
+    setDensityState(d);
+    try { localStorage.setItem(DENSITY_KEY, d); } catch { /* ignore */ }
+  };
+
   // Single pass over history → row list, tool-result lookup, last-assistant ref.
   const derived = useMemo<Derived>(() => {
     const resultMap = new Map<string, ToolResultMessage>();
@@ -78,42 +97,67 @@ export function MessageList({ messages, streaming }: MessageListProps) {
   }, [rows, streaming]);
 
   return (
-    <div
-      ref={scrollRef}
-      className="flex flex-col h-full overflow-auto py-2"
-      onScroll={onScroll}
-    >
-      <div
-        className="relative w-full"
-        style={{ height: `${virtualizer.getTotalSize()}px` }}
-      >
-        {virtualizer.getVirtualItems().map((vi) => {
-          const message = rows[vi.index];
-          if (!message) return null;
-          return (
-            <div
-              key={vi.key}
-              data-index={vi.index}
-              ref={virtualizer.measureElement}
-              className="px-[14px] py-[6px] box-border"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                transform: `translateY(${vi.start}px)`,
-              }}
+    <DensityContext.Provider value={density}>
+      {/* Density control bar */}
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <span className="text-[10px] uppercase tracking-[0.1em] font-mono text-muted-foreground/50">
+          Session
+        </span>
+        <div className="flex gap-0.5 rounded bg-muted/60 p-0.5">
+          {(['compact', 'full'] as Density[]).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDensity(d)}
+              className={cn(
+                'px-2 py-0.5 text-[10px] font-mono rounded transition-colors',
+                density === d
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
             >
-              <MessageView
-                message={message}
-                isLastAssistant={message === derived.lastAssistant}
-                streaming={streaming}
-                resultFor={resultFor}
-              />
-            </div>
-          );
-        })}
+              {d === 'compact' ? 'Compact' : 'Full'}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
+      <div
+        ref={scrollRef}
+        className="flex flex-col flex-1 overflow-auto py-2"
+        onScroll={onScroll}
+      >
+        <div
+          className="relative w-full"
+          style={{ height: `${virtualizer.getTotalSize()}px` }}
+        >
+          {virtualizer.getVirtualItems().map((vi) => {
+            const message = rows[vi.index];
+            if (!message) return null;
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={virtualizer.measureElement}
+                className="px-[14px] py-[6px] box-border"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${vi.start}px)`,
+                }}
+              >
+                <MessageView
+                  message={message}
+                  isLastAssistant={message === derived.lastAssistant}
+                  streaming={streaming}
+                  resultFor={resultFor}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </DensityContext.Provider>
   );
 }

@@ -8,6 +8,8 @@
  */
 
 import { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils.js';
 import { escapeText } from '../render/sanitize.js';
 
 export interface ThinkingBlockProps {
@@ -20,29 +22,31 @@ export function ThinkingBlock({ thinking, inProgress }: ThinkingBlockProps) {
   const [open, setOpen] = useState(false);
   // Auto-reveal while actively streaming; user can still collapse; defaults
   // collapsed once finished.
-  const expanded = open || inProgress;
+  const bodyVisible = inProgress || open;
 
   return (
     <div
-      className="border-l-[3px] rounded-r-md my-1.5 bg-muted/40"
+      className="border-l-[3px] rounded-r-md my-1.5 bg-[var(--thinking)]/5"
       style={{ borderLeftColor: 'var(--thinking)' }}
     >
       <div
-        className="cursor-pointer select-none px-[10px] py-[5px] text-xs opacity-80 flex gap-1.5 items-center"
+        className="cursor-pointer select-none px-[10px] py-[5px] flex gap-1.5 items-center"
         onClick={() => setOpen((v) => !v)}
       >
-        <span
-          className="inline-block transition-transform duration-[0.12s]"
-          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
-        >
-          ▶
+        <ChevronRight
+          className={cn(
+            'size-3 shrink-0 transition-transform duration-[0.12s] text-muted-foreground/60',
+            bodyVisible && 'rotate-90',
+          )}
+        />
+        <span className="text-xs text-muted-foreground/60 italic">
+          Thinking{inProgress ? '…' : ''}
         </span>
-        <span>Thinking{inProgress ? '…' : ''}</span>
       </div>
-      {expanded && (
+      {bodyVisible && (
         <div
           className="px-3 pb-[10px] pt-[2px] whitespace-pre-wrap text-[13px] opacity-85"
-          dangerouslySetInnerHTML={{ __html: escapeText(thinking ?? '') }}
+          dangerouslySetInnerHTML={{ __html: escapeText(thinking) }}
         />
       )}
     </div>
