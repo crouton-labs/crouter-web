@@ -25,6 +25,7 @@ import {
 import { CanvasWatcher } from "./canvas/canvas-watcher.js";
 import { ChromeAssembler } from "./canvas/chrome-assembler.js";
 import { GitBranchCache } from "./canvas/git-branch-cache.js";
+import { GitStatusCache } from "./canvas/git-status-cache.js";
 import { DeckStore } from "./decks/deck-store.js";
 import {
   scanInbox,
@@ -37,6 +38,7 @@ import {
 import { registerActionRoutes } from "./http/action-routes.js";
 import { registerCanvasRoutes } from "./http/canvas-routes.js";
 import { registerDeckRoutes } from "./http/deck-routes.js";
+import { registerFileRoutes } from "./http/file-routes.js";
 import { Router, sendError } from "./http/router.js";
 import { serveStatic } from "./http/static.js";
 import { HubRegistry } from "./session/hub-registry.js";
@@ -55,6 +57,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
 
   // --- shared singletons + crouter-lib DI seams ---
   const branchCache = new GitBranchCache();
+  const statusCache = new GitStatusCache();
 
   // One hub per node, shared across tabs; resolves liveness, the session file,
   // and the dormant normalizer from crouter-lib in this single place.
@@ -77,6 +80,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
     getNode,
     readTelemetry,
     getBranch: (cwd) => branchCache.getBranch(cwd),
+    getStatus: (cwd) => statusCache.getStatus(cwd),
     normalizeDormant: async (id) => {
       const file = getNode(id)?.pi_session_file ?? null;
       if (!file) return null;
@@ -117,6 +121,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
     getCommandsFor: (id) => hubRegistry.getCommands(id),
   });
   registerDeckRoutes(router, { store: deckStore });
+  registerFileRoutes(router, { getNode, nodeDir });
   registerActionRoutes(router, {
     spawnChild,
     appendInbox,

@@ -129,3 +129,16 @@ export function resolveDeck(
 ): Promise<ResolveDeckResponse> {
   return postJson<ResolveDeckResponse>(`/api/decks/${encodeURIComponent(id)}/resolve`, req);
 }
+
+export interface FilePeekResponse {
+  path: string;
+  content: string;
+  truncated: boolean;
+}
+
+/** `GET /api/nodes/:id/file?path=<absolute>` — peek a text file inside the node's dirs. */
+export function peekFile(nodeId: string, filePath: string): Promise<FilePeekResponse> {
+  return getJson<FilePeekResponse>(
+    `/api/nodes/${encodeURIComponent(nodeId)}/file?path=${encodeURIComponent(filePath)}`,
+  );
+}

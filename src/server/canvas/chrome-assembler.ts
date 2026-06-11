@@ -6,7 +6,7 @@
 // activity, context-usage percent, or live session stats (those only come live or,
 // for stats, from the static parse).
 
-import type { NodeDetail, NodeSummary, Presence, SessionStatsSummary } from "../../shared/protocol.js";
+import type { GitStatus, NodeDetail, NodeSummary, Presence, SessionStatsSummary } from "../../shared/protocol.js";
 import type { BrokerSnapshot, NodeMeta, SessionStats, Telemetry } from "../crouter-lib.js";
 import type { NormalizedDormantSession } from "../static-session/normalizer.js";
 
@@ -54,6 +54,8 @@ export interface ChromeAssemblerDeps {
   readTelemetry: (id: string) => Telemetry;
   /** Branch resolver (GitBranchCache.getBranch.bind(cache)). */
   getBranch: (cwd: string) => Promise<string | null>;
+  /** Working-tree status resolver (GitStatusCache.getStatus.bind(cache)); optional. */
+  getStatus?: (cwd: string) => Promise<GitStatus | null>;
   /** Live snapshot from the session hub when a broker is connected; absent ⇒ dormant. */
   getLiveSnapshot?: (id: string) => LiveChromeInput | null;
   /** Presence reader (server tab count blended with attach.json); null when unknown. */
@@ -75,17 +77,18 @@ export class ChromeAssembler {
     const attention = this.deps.getAttention?.(id) ?? 0;
     const summary = toNodeSummary(node, attention);
     const branch = await this.deps.getBranch(node.cwd);
+    const gitStatus = this.deps.getStatus ? await this.deps.getStatus(node.cwd).catch(() => null) : null;
     const presence = this.deps.getPresence?.(id) ?? null;
 
     const live = node.host_kind === "broker" ? this.deps.getLiveSnapshot?.(id) ?? null : null;
     if (live) {
-      return this.assembleLive(summary, branch, presence, live);
+      return this.assembleLive(summary, branch, presence, live, gitStatus);
     }
     const telemetry = this.deps.readTelemetry(id);
     const staticSession = this.deps.normalizeDormant
       ? await this.deps.normalizeDormant(id).catch(() => null)
       : null;
-    return this.assembleDormant(summary, branch, presence, telemetry, staticSession);
+    return this.assembleDormant(summary, branch, presence, telemetry, staticSession, gitStatus);
   }
 
   /** Live chrome from a broker snapshot's stats + state. */
@@ -94,6 +97,7 @@ export class ChromeAssembler {
     branch: string | null,
     presence: Presence | null,
     input: LiveChromeInput,
+    gitStatus: GitStatus | null = null,
   ): NodeDetail {
     const { stats, state } = input;
     const context =
@@ -126,6 +130,7 @@ export class ChromeAssembler {
       stats: sessionStats,
       presence,
       live: true,
+      git_status: gitStatus,
     };
   }
 
@@ -136,6 +141,7 @@ export class ChromeAssembler {
     presence: Presence | null,
     telemetry: Telemetry,
     staticSession: NormalizedDormantSession | null,
+    gitStatus: GitStatus | null = null,
   ): NodeDetail {
     // Raw context-token count without a window denominator (F.4): window===0 is the
     // convention that signals "tokens known, percent unknown" to the client.
@@ -158,6 +164,7 @@ export class ChromeAssembler {
       stats,
       presence,
       live: false,
+      git_status: gitStatus,
     };
   }
 }
