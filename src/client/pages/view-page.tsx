@@ -1,16 +1,18 @@
 /**
  * View host page — renders a single agent-authored view (design §7).
  * Header: Fraunces italic title, provenance line. View-local tab strip.
- * Active tab blocks rendered via BlockRenderer. Chat drawer (right): shell
- * only — drawer with "Chat" header + placeholder stream. The full conversation
- * substrate wiring is a clean cut (would be >150 lines of new glue); the drawer
- * frame and layout are in place so it snaps in later.
+ * Active tab blocks rendered via BlockRenderer. Chat drawer (right): wired
+ * to the built_by node's live session (same substrate as node-page).
  */
 
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useView } from '../lib/use-views.js';
 import { BlockRenderer } from '../views/block-renderer.js';
 import { useCapability } from '../profile/provider.js';
+import { useSessionStore } from '../store/session-store.js';
+import { MessageList } from '../session/message-list.js';
+import { PeekContext } from '../session/tool-card/parts.js';
 import { cn } from '@/lib/utils.js';
 
 export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): React.ReactElement {
@@ -108,18 +110,73 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
         {activeTab && <BlockRenderer blocks={activeTab.blocks} />}
       </div>
 
-      {/* ── chat drawer (shell — conversation wiring is a clean cut) ── */}
-      {hasDrawer && <ChatDrawerShell builtBy={view.built_by} />}
+      {/* ── chat drawer — live session for built_by node ── */}
+      {hasDrawer && view.built_by && <ChatDrawerShell builtBy={view.built_by} />}
     </div>
   );
 }
 
-// ─── Chat drawer shell (clean cut — conversation wiring not implemented) ─────
-// Full wiring (connecting built_by node's session socket, message list, send)
-// would require >150 lines of new glue between the session substrate and this
-// drawer context. The shell provides the layout frame for a future snap-in.
+// ─── Chat drawer — wired to built_by node's live session ──────────────────────
+// Reuses the exact same session substrate as node-page: useSessionStore for
+// attach/WS lifecycle, MessageList for the read flow, and the same canDrive
+// derivation + auto-control grab (Studio semantics: no manual arbitration UI).
+// When built_by is null the drawer is hidden by the parent. If the session
+// can't attach (node gone, broker down) a quiet one-line empty state is shown.
 
 function ChatDrawerShell({ builtBy }: { builtBy: string | null }): React.ReactElement {
+  // builtBy is always non-null here (parent hides when null), but TypeScript
+  // needs the runtime guard. Render nothing if somehow called with null.
+  if (!builtBy) return <></>;
+  return <ChatDrawerLive nodeId={builtBy} />;
+}
+
+function ChatDrawerLive({ nodeId }: { nodeId: string }): React.ReactElement {
+  const store = useSessionStore(nodeId);
+  const [input, setInput] = useState('');
+
+  // Mirror node-page's canDrive derivation exactly — do not invent new logic.
+  const dormant = store.source === 'static';
+  const brokerUp = store.brokerStatus === 'connected' || store.brokerStatus === 'revived';
+  const isController = store.role === 'controller';
+  const streaming = store.state?.isStreaming ?? false;
+  const canDrive = isController && !dormant && brokerUp && store.serverConnected;
+
+  // Auto-grab controller slot on open, re-arm on socket reconnect (design §4.3).
+  // This is the Studio path — no manual arbitration UI in the drawer.
+  const autoControlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!store.socketReady) autoControlRef.current = null;
+  }, [store.socketReady]);
+  useEffect(() => {
+    if (dormant) return;
+    if (!store.socketReady || !brokerUp) return;
+    if (store.role === 'controller') return;
+    if (autoControlRef.current === nodeId) return;
+    autoControlRef.current = nodeId;
+    store.requestControl();
+  }, [dormant, store.socketReady, brokerUp, store.role, nodeId, store]);
+
+  const send = (): void => {
+    const text = input.trim();
+    if (!text || !canDrive) return;
+    if (streaming) store.steer(text);
+    else store.prompt(text);
+    setInput('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  // Quiet one-line empty state when broker is unreachable or node is gone.
+  const unreachable = !brokerUp && !dormant && store.serverConnected;
+
+  // PeekContext: drawer has no file-peek panel, so onPeek is a no-op.
+  const peekNoop = useRef({ peekedPath: null as string | null, onPeek: (_: string) => {} });
+
   return (
     <div
       className="flex w-[372px] shrink-0 flex-col border-l"
@@ -145,40 +202,57 @@ function ChatDrawerShell({ builtBy }: { builtBy: string | null }): React.ReactEl
         >
           Chat
         </span>
-        {builtBy && (
-          <span
-            className="rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-widest text-muted-foreground"
-            style={{ fontFamily: 'var(--font-inst)', borderColor: 'var(--border)' }}
-          >
-            {builtBy}
-          </span>
-        )}
+        <span
+          className="rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-widest text-muted-foreground"
+          style={{ fontFamily: 'var(--font-inst)', borderColor: 'var(--border)' }}
+        >
+          {nodeId}
+        </span>
       </div>
 
-      {/* message stream placeholder */}
-      <div className="flex-1 overflow-auto px-[18px] py-5">
-        <p className="text-sm text-muted-foreground/50 italic">
-          Chat wiring coming soon — the conversation substrate will connect here.
-        </p>
+      {/* message stream */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {unreachable ? (
+          <p className="px-[18px] py-5 text-sm italic text-muted-foreground/50">
+            Node is unreachable — messages will appear when it reconnects.
+          </p>
+        ) : (
+          <PeekContext.Provider value={peekNoop.current}>
+            <MessageList messages={store.messages} streaming={streaming} />
+          </PeekContext.Provider>
+        )}
       </div>
 
       {/* composer footer */}
       <div className="shrink-0 px-4 pb-[18px] pt-3.5">
         <div
-          className="flex items-center gap-3 rounded-full border px-5 py-2 text-[13.5px] text-muted-foreground/60"
+          className={cn(
+            'flex items-end gap-3 rounded-2xl border px-5 py-2 text-[13.5px]',
+            canDrive ? 'text-foreground' : 'text-muted-foreground/60',
+          )}
           style={{
             borderColor: 'var(--border)',
             background: 'var(--background)',
             boxShadow: '0 10px 30px -14px rgba(60,50,30,.2)',
           }}
         >
-          <span className="flex-1">Refine this view…</span>
+          <textarea
+            className="flex-1 resize-none bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground/50"
+            rows={1}
+            disabled={!canDrive}
+            placeholder="Refine this view…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={{ lineHeight: '1.5' }}
+          />
           <button
             type="button"
-            disabled
-            className="rounded-full bg-foreground px-4 py-1.5 text-xs font-medium text-background opacity-40"
+            disabled={!canDrive || !input.trim()}
+            onClick={send}
+            className="mb-0.5 rounded-full bg-foreground px-4 py-1.5 text-xs font-medium text-background transition-opacity disabled:opacity-40"
           >
-            Send
+            {streaming ? 'Steer' : 'Send'}
           </button>
         </div>
       </div>
