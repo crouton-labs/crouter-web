@@ -5,13 +5,20 @@
 // last snapshot backs the `GET /api/canvas` poll-fallback. Cost is flat regardless
 // of viewer count (one poller, fanned out). No per-node chrome here.
 
+import { join } from "node:path";
+
 import type { CanvasMsg, CanvasSnapshot, NodeSummary } from "../../shared/protocol.js";
-import type { AskEntry, NodeRow } from "../crouter-lib.js";
-import { toNodeSummary } from "./chrome-assembler.js";
+import type { AskEntry, NodeMeta, NodeRow } from "../crouter-lib.js";
+import { type NodeIdentityLike, nodeLastActivity, toNodeSummary } from "./chrome-assembler.js";
 
 export interface CanvasWatcherDeps {
   listNodes: (filter?: { status?: NodeRow["status"] | NodeRow["status"][] }) => NodeRow[];
   asksAcrossCanvas: () => AskEntry[];
+  /** Full node identity resolver (for `cycles` + the pi session-file path); optional.
+   *  When absent, summaries omit `cycles` + `last_activity` (back-compat). */
+  getNode?: (id: string) => NodeMeta | null;
+  /** Node state-dir resolver (for the `meta.json` mtime fallback of `last_activity`). */
+  nodeDir?: (id: string) => string;
   /** Poll interval in ms (design D6 ~1.5s). */
   intervalMs?: number;
   /** Clock injection for `generated_at` (tests). */
@@ -63,7 +70,11 @@ function summaryEqual(a: NodeSummary, b: NodeSummary): boolean {
     a.created === b.created &&
     a.host_kind === b.host_kind &&
     a.enterable === b.enterable &&
-    a.attention_count === b.attention_count
+    a.attention_count === b.attention_count &&
+    a.cycles === b.cycles
+    // `last_activity` is intentionally excluded: it advances on every turn (session
+    // mtime), so comparing it would defeat the change-only push and the client
+    // derives a relative time from it regardless.
   );
 }
 
@@ -152,6 +163,16 @@ export class CanvasWatcher {
     for (const a of asks) {
       if (a.node_id) byNode.set(a.node_id, a.count);
     }
-    return rows.map((row) => toNodeSummary(row, byNode.get(row.node_id) ?? 0));
+    return rows.map((row) => {
+      // The bare NodeRow lacks `cycles` + the session-file path; enrich from the
+      // hydrated meta when a resolver is wired (one cheap read/stat per node, flat
+      // in viewer count). Both fields are additive — absent resolver ⇒ omitted.
+      const meta = this.deps.getNode?.(row.node_id) ?? null;
+      const metaPath = this.deps.nodeDir ? join(this.deps.nodeDir(row.node_id), "meta.json") : null;
+      const lastActivity = nodeLastActivity(meta?.pi_session_file, metaPath);
+      const identity: NodeIdentityLike =
+        meta?.cycles != null ? { ...row, cycles: meta.cycles } : row;
+      return toNodeSummary(identity, byNode.get(row.node_id) ?? 0, lastActivity);
+    });
   }
 }

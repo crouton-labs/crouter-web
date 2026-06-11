@@ -81,6 +81,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
   // identity + last-known/dormant-derived stats (F.4).
   const assembler = new ChromeAssembler({
     getNode,
+    nodeDir,
     readTelemetry,
     getBranch: (cwd) => branchCache.getBranch(cwd),
     getStatus: (cwd) => statusCache.getStatus(cwd),
@@ -95,7 +96,7 @@ export async function serve(opts: ServeOpts): Promise<void> {
     },
   });
 
-  const watcher = new CanvasWatcher({ listNodes, asksAcrossCanvas });
+  const watcher = new CanvasWatcher({ listNodes, asksAcrossCanvas, getNode, nodeDir });
   watcher.start();
 
   // Deck read+resolve layer (design §5.2). Reads pending humanloop decks across

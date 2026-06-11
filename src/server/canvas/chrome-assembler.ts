@@ -6,6 +6,9 @@
 // activity, context-usage percent, or live session stats (those only come live or,
 // for stats, from the static parse).
 
+import { statSync } from "node:fs";
+import { join } from "node:path";
+
 import type { GitStatus, NodeDetail, NodeSummary, Presence, SessionStatsSummary } from "../../shared/protocol.js";
 import type { BrokerSnapshot, NodeMeta, SessionStats, Telemetry } from "../crouter-lib.js";
 import type { NormalizedDormantSession } from "../static-session/normalizer.js";
@@ -22,12 +25,21 @@ export interface NodeIdentityLike {
   host_kind?: "tmux" | "broker" | null;
   parent?: string | null;
   created: string;
+  /** Canvas cycle count (revive generations). Present on `NodeMeta`; absent on a
+   *  bare `NodeRow`, in which case the summary omits it (back-compat). */
+  cycles?: number;
 }
 
-/** Map a crouter node identity row to the wire `NodeSummary` (spec §6.1). */
-export function toNodeSummary(node: NodeIdentityLike, attentionCount: number): NodeSummary {
+/** Map a crouter node identity row to the wire `NodeSummary` (spec §6.1). The
+ *  optional `lastActivity` (ISO) is sourced by the caller via {@link nodeLastActivity};
+ *  both `cycles` and `last_activity` are emitted only when known. */
+export function toNodeSummary(
+  node: NodeIdentityLike,
+  attentionCount: number,
+  lastActivity?: string,
+): NodeSummary {
   const host_kind = node.host_kind === "broker" ? "broker" : "tmux";
-  return {
+  const summary: NodeSummary = {
     node_id: node.node_id,
     name: node.name,
     kind: node.kind,
@@ -41,6 +53,29 @@ export function toNodeSummary(node: NodeIdentityLike, attentionCount: number): N
     enterable: host_kind === "broker",
     attention_count: attentionCount,
   };
+  if (typeof node.cycles === "number") summary.cycles = node.cycles;
+  if (lastActivity) summary.last_activity = lastActivity;
+  return summary;
+}
+
+/** Cheapest available "most recent work" timestamp for a node, or undefined when
+ *  unknown. Prefers the pi session `.jsonl` mtime (the broker rewrites it every
+ *  turn), then the node's `meta.json` mtime. Stat-only — never reads a file — and
+ *  tolerant: any missing/unreadable candidate is skipped, so a node with neither
+ *  simply omits the field. */
+export function nodeLastActivity(
+  sessionFile: string | null | undefined,
+  metaPath: string | null | undefined,
+): string | undefined {
+  for (const p of [sessionFile, metaPath]) {
+    if (!p) continue;
+    try {
+      return statSync(p).mtime.toISOString();
+    } catch {
+      // missing/unreadable → fall through to the next candidate
+    }
+  }
+  return undefined;
 }
 
 /** The live chrome inputs the hub hands the assembler for an entered node. */
@@ -51,6 +86,8 @@ export interface LiveChromeInput {
 
 export interface ChromeAssemblerDeps {
   getNode: (id: string) => NodeMeta | null;
+  /** Node state-dir resolver, for the `meta.json` mtime fallback of `last_activity`. */
+  nodeDir?: (id: string) => string;
   readTelemetry: (id: string) => Telemetry;
   /** Branch resolver (GitBranchCache.getBranch.bind(cache)). */
   getBranch: (cwd: string) => Promise<string | null>;
@@ -75,7 +112,9 @@ export class ChromeAssembler {
     if (!node) return null;
 
     const attention = this.deps.getAttention?.(id) ?? 0;
-    const summary = toNodeSummary(node, attention);
+    const metaPath = this.deps.nodeDir ? join(this.deps.nodeDir(id), "meta.json") : null;
+    const lastActivity = nodeLastActivity(node.pi_session_file, metaPath);
+    const summary = toNodeSummary(node, attention, lastActivity);
     const branch = await this.deps.getBranch(node.cwd);
     const gitStatus = this.deps.getStatus ? await this.deps.getStatus(node.cwd).catch(() => null) : null;
     const presence = this.deps.getPresence?.(id) ?? null;

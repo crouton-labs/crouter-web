@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import type { NodeMeta, SessionStats, Telemetry } from "../../crouter-lib.js";
 import type { NormalizedDormantSession } from "../../static-session/normalizer.js";
@@ -6,6 +9,7 @@ import {
   ChromeAssembler,
   type ChromeAssemblerDeps,
   type LiveChromeInput,
+  nodeLastActivity,
   toNodeSummary,
 } from "../chrome-assembler.js";
 
@@ -71,6 +75,64 @@ test("toNodeSummary maps host_kind null → tmux and enterable correctly", () =>
   assert.equal(tmux.attention_count, 2);
   const broker = toNodeSummary(meta({ host_kind: "broker" }), 0);
   assert.equal(broker.enterable, true);
+});
+
+test("toNodeSummary threads cycles + last_activity, omits when unknown", () => {
+  const withBoth = toNodeSummary(meta({ cycles: 7 }), 0, "2026-03-03T00:00:00.000Z");
+  assert.equal(withBoth.cycles, 7);
+  assert.equal(withBoth.last_activity, "2026-03-03T00:00:00.000Z");
+
+  const without = toNodeSummary(meta({ cycles: undefined }), 0);
+  assert.equal("cycles" in without, false, "no cycles field when unknown");
+  assert.equal("last_activity" in without, false, "no last_activity field when unknown");
+});
+
+test("nodeLastActivity: session-file mtime preferred, meta fallback, undefined when neither", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chrome-act-"));
+  try {
+    const session = join(dir, "s.jsonl");
+    const metaFile = join(dir, "meta.json");
+    writeFileSync(session, "{}");
+    writeFileSync(metaFile, "{}");
+    const sessionTime = new Date("2026-04-04T00:00:00.000Z");
+    const metaTime = new Date("2026-01-01T00:00:00.000Z");
+    utimesSync(session, sessionTime, sessionTime);
+    utimesSync(metaFile, metaTime, metaTime);
+
+    assert.equal(nodeLastActivity(session, metaFile), sessionTime.toISOString());
+    assert.equal(
+      nodeLastActivity(join(dir, "missing.jsonl"), metaFile),
+      metaTime.toISOString(),
+      "falls back to meta.json mtime when the session file is absent",
+    );
+    assert.equal(
+      nodeLastActivity(null, join(dir, "missing.json")),
+      undefined,
+      "omits when nothing can be stat'd",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("assemble: cycles + last_activity flow into NodeDetail", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chrome-asm-"));
+  try {
+    const session = join(dir, "s.jsonl");
+    writeFileSync(session, "{}");
+    const when = new Date("2026-05-05T00:00:00.000Z");
+    utimesSync(session, when, when);
+    const a = makeAssembler({
+      getNode: () => meta({ cycles: 4, pi_session_file: session } as Partial<NodeMeta>),
+      nodeDir: () => dir,
+      getLiveSnapshot: () => liveInput(),
+    });
+    const d = await a.assemble("n1");
+    assert.equal(d!.cycles, 4);
+    assert.equal(d!.last_activity, when.toISOString());
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("unknown node → null (route renders 404)", async () => {

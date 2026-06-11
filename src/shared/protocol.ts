@@ -100,6 +100,12 @@ export interface NodeSummary {
   enterable: boolean;
   /** Count of pending human asks (blocked-on-human indicator). */
   attention_count: number;
+  /** Canvas cycle count for this node (revive/yield generations). Optional for
+   *  back-compat with snapshots produced before the field existed. */
+  cycles?: number;
+  /** ISO-8601 of the node's most recent work (session activity), distinct from
+   *  `created`. Optional/back-compat; falls back to `created` when absent. */
+  last_activity?: string;
 }
 
 /** input/output token burn, with cache reads where the provider reports them. */
