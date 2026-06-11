@@ -20,7 +20,7 @@ import {
   type Conversation,
   type ConversationState,
 } from '../lib/conversations.js';
-import { spawnNode, RestError } from '../api/rest.js';
+import { spawnNode, RestError } from '../net/rest.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
 import { cn } from '@/lib/utils.js';
@@ -43,7 +43,17 @@ export function ConversationsPage() {
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col px-6 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Conversations</h1>
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '28px',
+            fontWeight: 460,
+            letterSpacing: '-0.01em',
+            color: 'var(--ink)',
+          }}
+        >
+          Conversations
+        </h1>
         {!showEmpty && !composing && (
           <Button size="lg" onClick={() => setComposing(true)}>
             + New chat
@@ -52,7 +62,7 @@ export function ConversationsPage() {
       </div>
 
       {!reachable && (
-        <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-foreground/80">
+        <div className="mb-4 rounded-lg border px-4 py-2.5 text-sm" style={{ borderColor: 'rgba(255,94,54,.3)', background: 'var(--blk-dim)', color: 'var(--ink2)' }}>
           Couldn&apos;t reach your agents — retrying…
         </div>
       )}
@@ -119,9 +129,9 @@ function NewChatComposer({
   };
 
   return (
-    <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <div className="panel mb-6 p-5">
       {firstRun && (
-        <p className="mb-3 text-base text-foreground/80">Start a conversation with an agent.</p>
+        <p className="mb-3 text-base" style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', color: 'var(--ink2)' }}>Start a conversation with an agent.</p>
       )}
       <Textarea
         autoFocus
@@ -140,7 +150,7 @@ function NewChatComposer({
             type="button"
             disabled={busy}
             onClick={() => setText(chip)}
-            className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-[color:var(--line2)] hover:text-foreground"
           >
             {chip}
           </button>
@@ -172,18 +182,18 @@ function ConversationRow({ conversation: c }: { conversation: Conversation }) {
       <button
         type="button"
         onClick={() => navigate(`/c/${encodeURIComponent(c.id)}`)}
-        className="flex w-full items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="panel flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-[color-mix(in_oklch,var(--ink)_3%,transparent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {c.state === 'needs-you' && (
-              <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="needs you" />
+              <span className="dot blocked shrink-0" aria-label="needs you" />
             )}
-            <span className="truncate text-base font-semibold">{c.title}</span>
+            <span className="truncate" style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--ink)' }}>{c.title}</span>
           </div>
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{previewLine(c)}</p>
+          <p className="mt-0.5 truncate text-sm" style={{ color: 'var(--mut)' }}>{previewLine(c)}</p>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground/70">
+        <span className="shrink-0" style={{ fontFamily: 'var(--font-inst)', fontSize: '9px', letterSpacing: '0.08em', color: 'var(--mut)' }}>
           {relativeTime(c.lastActivity)}
         </span>
         <StatePill state={c.state} />
@@ -193,37 +203,17 @@ function ConversationRow({ conversation: c }: { conversation: Conversation }) {
 }
 
 function StatePill({ state }: { state: ConversationState }) {
-  const meta: Record<ConversationState, { label: string; className: string; dot: string }> = {
-    'needs-you': {
-      label: 'Needs you',
-      className: 'border-primary/40 bg-primary/10 text-primary',
-      dot: 'bg-primary',
-    },
-    active: {
-      label: 'Active',
-      className: 'border-success/40 bg-success/10 text-success',
-      dot: 'bg-success animate-pulse',
-    },
-    idle: {
-      label: 'Idle',
-      className: 'border-border bg-muted text-muted-foreground',
-      dot: 'bg-muted-foreground/50',
-    },
-    done: {
-      label: 'Finished',
-      className: 'border-border bg-muted text-muted-foreground',
-      dot: 'bg-muted-foreground/40',
-    },
+  // Map conversation state onto the QI badge/dot variants.
+  const meta: Record<ConversationState, { label: string; variant: string }> = {
+    'needs-you': { label: 'Needs you', variant: 'blocked' },
+    active: { label: 'Active', variant: 'active' },
+    idle: { label: 'Idle', variant: 'idle' },
+    done: { label: 'Finished', variant: 'done' },
   };
   const m = meta[state];
   return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
-        m.className,
-      )}
-    >
-      <span className={cn('size-1.5 rounded-full', m.dot)} />
+    <span className={cn('badge shrink-0', m.variant)}>
+      <span className={cn('dot', m.variant)} />
       {m.label}
     </span>
   );
@@ -235,7 +225,7 @@ function SkeletonRows() {
       {[0, 1, 2, 3].map((i) => (
         <li
           key={i}
-          className="flex items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4"
+          className="panel flex items-center gap-4 px-4 py-3.5"
         >
           <div className="min-w-0 flex-1 space-y-2">
             <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />

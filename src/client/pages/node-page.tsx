@@ -15,8 +15,9 @@ import { useState, useEffect, useRef, useCallback, Fragment, type KeyboardEvent,
 import { useNavigate } from 'react-router-dom';
 import type { Command, NodeDetail, ThinkingLevel } from '../../shared/protocol.js';
 import type { Capability } from '../profile/types.js';
-import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } from '../api/rest.js';
+import { closeNode, getCommands, getNode, messageNode, reviveNode, RestError } from '../net/rest.js';
 import { useSessionStore, type SessionStore } from '../store/session-store.js';
+import type { CSSProperties } from 'react';
 import { TitleBar, ChromePanel } from '../chrome/chrome-bar.js';
 import { MetaStrip } from '../chrome/meta-strip.js';
 import { GraphRail } from '../session/graph-rail.js';
@@ -35,13 +36,6 @@ import { PeekContext } from '../session/tool-card/parts.js';
 import { Button } from '@/components/ui/button.js';
 import { Textarea } from '@/components/ui/textarea.js';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select.js';
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -51,6 +45,14 @@ import {
 } from '@/components/ui/dialog.js';
 
 const THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+
+/** Reveal-stagger index for the `.in .rv` entrance animation. */
+const rv = (i: number): CSSProperties => ({ ['--i' as string]: i }) as CSSProperties;
+const CON_HEAD: CSSProperties = {
+  padding: '16px 30px',
+  borderBottom: '1px solid var(--line)',
+  background: 'linear-gradient(180deg, rgba(33,31,25,.7), rgba(20,19,16,0))',
+};
 
 /** The session screen's named slots (design §3.3). `rail` and `trace` are part
  *  of the layout contract but unfilled in Phase 1 (Studio's ActivityRail and
@@ -64,7 +66,8 @@ type SessionSlot =
   | 'composer'
   | 'trace'
   | 'graphRail'
-  | 'filePeek';
+  | 'filePeek'
+  | 'cluster';
 
 // ---------------------------------------------------------------------------
 // NodePage (SessionScreen)
@@ -218,6 +221,7 @@ export function NodePage(props: { id: string }) {
   const slots: SlotRegistry<SessionSlot> = {
     header: { render: () => <TitleBar store={store} detail={detail} /> },
     chrome: { cap: 'node.internals', render: () => <MetaStrip store={store} detail={detail} /> },
+    cluster: { cap: 'node.internals', render: () => <ChromePanel store={store} detail={detail} /> },
     stream: { render: () => <MessageList messages={store.messages} streaming={streaming} /> },
     arbitration: { cap: 'node.arbitration', render: () => <Presence store={store} /> },
     rail: { cap: 'subnodes.activity', render: () => <ActivityRail rootId={props.id} /> },
@@ -297,17 +301,28 @@ export function NodePage(props: { id: string }) {
 
   return (
     <PeekContext.Provider value={{ peekedPath, onPeek: setPeekedPath }}>
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
-        <Button variant="link" onClick={() => navigate(home.path)}>
+    <div className="in flex h-full min-h-0 flex-col">
+      <div
+        className={cn('con-head rv flex shrink-0 items-center gap-[14px]', dormant && 'opacity-80')}
+        style={{ ...CON_HEAD, ...rv(1) }}
+      >
+        <button
+          type="button"
+          onClick={() => navigate(home.path)}
+          className="flex shrink-0 items-center gap-[7px] text-[12.5px] text-[var(--mut)] transition-colors hover:text-[var(--ink)]"
+        >
           ← {home.label}
-        </Button>
-        <div className={cn('flex min-w-0 flex-1 flex-col gap-1', dormant && 'opacity-70')}>
-          <Slot reg={slots} name="header" />
-          <Slot reg={slots} name="chrome" />
-        </div>
+        </button>
+        <Slot reg={slots} name="header" />
+        <div className="flex-1" />
         <Slot reg={slots} name="arbitration" />
-      </header>
+      </div>
+      <div className="rv" style={rv(2)}>
+        <Slot reg={slots} name="chrome" />
+      </div>
+      <div className="rv" style={rv(2)}>
+        <Slot reg={slots} name="cluster" />
+      </div>
 
       <BrokerBanner state={store.brokerStatus} dormant={dormant} />
       {contended && (
@@ -333,16 +348,18 @@ export function NodePage(props: { id: string }) {
           deep-linked into the Inbox for complex ones. Capability-neutral. */}
       <InlineAsks conversationId={props.id} />
 
-      <div className="min-h-0 flex-1 flex overflow-hidden">
+      <div className="streamwrap relative flex min-h-0 flex-1 overflow-hidden">
         <Slot reg={slots} name="graphRail" />
-        <main className="min-h-0 flex-1 overflow-auto">
-          <Slot reg={slots} name="stream" />
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="min-h-0 flex-1 overflow-auto">
+            <Slot reg={slots} name="stream" />
+          </main>
+          <Slot reg={slots} name="rail" />
+          <Slot reg={slots} name="composer" />
+        </div>
         <Slot reg={slots} name="filePeek" />
       </div>
 
-      <Slot reg={slots} name="rail" />
-      <Slot reg={slots} name="composer" />
       <Slot reg={slots} name="trace" />
 
       <ExtensionDialog store={store} />
@@ -444,27 +461,29 @@ function DriveToolbar({
     {
       key: 'thinking',
       node: (
-        <label className="flex items-center gap-1 text-sm">
-          thinking
-          <Select
+        // One `.tiny-sel` pill — CSS uppercases it to `THINKING HIGH ▾`. The
+        // native <select> sits transparent over the pill so it stays a real
+        // level picker (m4) while reading as a single instrument label.
+        <label className="tiny-sel relative" aria-disabled={!canDrive}>
+          thinking <b>{thinking}</b>
+          <span style={{ fontSize: '8px' }}>▾</span>
+          <select
             disabled={!canDrive}
             value={thinking}
-            onValueChange={(level) => {
-              setOverride(level as ThinkingLevel);
-              store.setThinkingLevel(level as ThinkingLevel);
+            onChange={(e) => {
+              const level = e.currentTarget.value as ThinkingLevel;
+              setOverride(level);
+              store.setThinkingLevel(level);
             }}
+            aria-label="Thinking level"
+            className="absolute inset-0 cursor-pointer opacity-0"
           >
-            <SelectTrigger className="h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {THINKING_LEVELS.map((l) => (
-                <SelectItem key={l} value={l}>
-                  {l}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {THINKING_LEVELS.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
         </label>
       ),
     },

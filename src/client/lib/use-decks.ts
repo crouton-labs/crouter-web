@@ -10,7 +10,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import type { DeckSummary, NodeSummary } from '../../shared/protocol.js';
-import { getDecks } from '../api/rest.js';
+import { getDecks } from '../net/rest.js';
 import { useCanvasStore } from './use-canvas-store.js';
 
 /** Total pending asks across the canvas (deduped by cwd at the source). */

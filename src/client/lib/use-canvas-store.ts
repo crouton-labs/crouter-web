@@ -9,8 +9,8 @@
 
 import { useState, useEffect } from 'react';
 import type { NodeSummary } from '../../shared/protocol.js';
-import { getCanvas } from '../api/rest.js';
-import { openCanvasSocket, type CanvasSocket } from '../api/canvas-socket.js';
+import { getCanvas } from '../net/rest.js';
+import { openCanvasSocket, type CanvasSocket } from '../net/canvas-socket.js';
 import { useServerStatus } from './server-status.js';
 
 const POLL_INTERVAL_MS = 2000;

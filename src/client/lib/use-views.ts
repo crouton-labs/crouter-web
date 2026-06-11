@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import type { ViewManifest } from '../../shared/protocol.js';
-import { listViews, getView as fetchView, RestError } from '../api/rest.js';
+import { listViews, getView as fetchView, RestError } from '../net/rest.js';
 
 const POLL_MS = 30_000;
 

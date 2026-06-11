@@ -25,6 +25,8 @@ interface Derived {
   visible: FoldedMessage[];
   resultMap: Map<string, ToolResultMessage>;
   lastAssistant: FoldedMessage | undefined;
+  /** Per-row turn label (e.g. "turn 3") for the first row of each turn, else null. */
+  turnLabels: (string | null)[];
 }
 
 const DENSITY_KEY = 'crtr-density';
@@ -61,7 +63,17 @@ export function MessageList({ messages, streaming }: MessageListProps) {
     const visible = messages.filter(
       (m) => !(m.role === 'toolResult' && callIds.has(m.toolCallId)),
     );
-    return { visible, resultMap, lastAssistant };
+    // A turn starts at each live user prompt (inbox-origin messages don't open a
+    // turn — they're an inbound event mid-turn). Label the opening row only.
+    let turn = 0;
+    const turnLabels = visible.map((m) => {
+      if (m.role === 'user' && m.origin !== 'inbox') {
+        turn += 1;
+        return `turn ${turn}`;
+      }
+      return null;
+    });
+    return { visible, resultMap, lastAssistant, turnLabels };
   }, [messages]);
 
   const rows = derived.visible;
@@ -98,23 +110,16 @@ export function MessageList({ messages, streaming }: MessageListProps) {
 
   return (
     <DensityContext.Provider value={density}>
-      {/* Density control bar */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-[10px] uppercase tracking-[0.1em] font-mono text-muted-foreground/50">
-          Session
-        </span>
-        <div className="flex gap-0.5 rounded bg-muted/60 p-0.5">
+      {/* Stream bar — segmented density control (Quiet Instrument) */}
+      <div className="flex items-center gap-[14px] px-[30px] pt-[18px] pb-[4px]">
+        <span className="instlabel text-[var(--dim)]">Session</span>
+        <div className="seg">
           {(['compact', 'full'] as Density[]).map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => setDensity(d)}
-              className={cn(
-                'px-2 py-0.5 text-[10px] font-mono rounded transition-colors',
-                density === d
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
+              className={cn(density === d && 'on')}
             >
               {d === 'compact' ? 'Compact' : 'Full'}
             </button>
@@ -147,6 +152,14 @@ export function MessageList({ messages, streaming }: MessageListProps) {
                   transform: `translateY(${vi.start}px)`,
                 }}
               >
+                {derived.turnLabels[vi.index] && (
+                  <div className="flex items-center gap-[12px] mt-[10px] mb-[14px]">
+                    <span className="font-[family-name:var(--font-inst)] text-[8.5px] tracking-[0.16em] uppercase text-[var(--dim)]">
+                      {derived.turnLabels[vi.index]}
+                    </span>
+                    <div className="flex-1 h-px bg-[var(--line)]" />
+                  </div>
+                )}
                 <MessageView
                   message={message}
                   isLastAssistant={message === derived.lastAssistant}

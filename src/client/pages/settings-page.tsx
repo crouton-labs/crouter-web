@@ -6,10 +6,16 @@
 
 import { useState } from 'react';
 import { ProfileSwitcher } from '../shell/profile-switcher.js';
+import { useProfile } from '../profile/provider.js';
 import { Button } from '@/components/ui/button.js';
 
 export function SettingsPage() {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  // Seed from the active profile's theme (the source of truth). Reading the
+  // document `.dark` class during render is stale on first mount — the
+  // ProfileProvider applies that class in a parent effect that fires *after*
+  // this page renders, which inverted the label.
+  const profile = useProfile();
+  const [dark, setDark] = useState(() => profile.defaultTheme === 'dark');
 
   const toggleTheme = (): void => {
     const el = document.documentElement;
@@ -21,19 +27,29 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-2xl flex-col gap-8 overflow-auto px-6 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <h1
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: '28px',
+          fontWeight: 460,
+          letterSpacing: '-0.01em',
+          color: 'var(--ink)',
+        }}
+      >
+        Settings
+      </h1>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium text-foreground">Profile</h2>
-        <p className="text-sm text-muted-foreground">
+      <section className="space-y-2.5">
+        <h2 className="instlabel">Profile</h2>
+        <p className="text-sm" style={{ color: 'var(--mut)' }}>
           Choose the experience. You can also switch from the header at any time.
         </p>
         <ProfileSwitcher />
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium text-foreground">Appearance</h2>
-        <p className="text-sm text-muted-foreground">
+      <section className="space-y-2.5">
+        <h2 className="instlabel">Appearance</h2>
+        <p className="text-sm" style={{ color: 'var(--mut)' }}>
           {dark ? 'Dark theme' : 'Light theme'} is active.
         </p>
         <Button variant="outline" onClick={toggleTheme}>

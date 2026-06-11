@@ -26,9 +26,30 @@ export function InboxPage() {
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Inbox</h1>
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '28px',
+            fontWeight: 460,
+            letterSpacing: '-0.01em',
+            color: 'var(--ink)',
+          }}
+        >
+          Inbox
+        </h1>
         {decks.length > 0 && (
-          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-sm font-medium text-primary">
+          <span
+            style={{
+              fontFamily: 'var(--font-inst)',
+              fontSize: '9px',
+              fontWeight: 600,
+              color: '#ff8260',
+              background: 'var(--blk-dim)',
+              border: '1px solid rgba(255,94,54,.35)',
+              padding: '1.5px 7px',
+              borderRadius: '99px',
+            }}
+          >
             {decks.length}
           </span>
         )}
@@ -62,27 +83,34 @@ function DeckRow({ deck }: { deck: DeckSummary }) {
       <button
         type="button"
         onClick={() => navigate(`/inbox/${encodeURIComponent(deck.id)}`)}
-        className="flex w-full items-start gap-4 rounded-2xl border border-border bg-card px-5 py-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="panel flex w-full items-start gap-4 px-4 py-3.5 text-left transition-colors hover:bg-[color-mix(in_oklch,var(--ink)_3%,transparent)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <span
-          className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+          className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-lg"
+          style={{ border: '1px solid var(--line)', color: 'var(--ink2)', background: 'color-mix(in oklch, var(--ink) 4%, transparent)' }}
           title={meta.label}
         >
           <Icon className="size-4.5" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-base font-semibold">{deck.title}</span>
-            <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+          <div className="flex items-center gap-2.5">
+            <span className="truncate" style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--ink)' }}>
+              {deck.title}
+            </span>
+            <span className="instlabel shrink-0" style={{ fontSize: '8.5px' }}>
               {meta.label}
             </span>
           </div>
           {deck.subtitle && (
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">{deck.subtitle}</p>
+            <p className="mt-0.5 truncate text-sm" style={{ color: 'var(--mut)' }}>{deck.subtitle}</p>
           )}
           <DeckProvenance deck={deck} className="mt-1.5" />
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground/70" title={`waiting ${waitedFor(deck.blocked_since)}`}>
+        <span
+          className="shrink-0"
+          style={{ fontFamily: 'var(--font-inst)', fontSize: '9px', letterSpacing: '0.08em', color: 'var(--mut)' }}
+          title={`waiting ${waitedFor(deck.blocked_since)}`}
+        >
           {waitedFor(deck.blocked_since)}
         </span>
       </button>
@@ -129,8 +157,10 @@ export function DeckProvenance({ deck, className }: { deck: DeckSummary; classNa
 function InboxZero() {
   return (
     <div className="flex h-full flex-col items-center justify-center py-16 text-center">
-      <p className="text-lg font-medium text-foreground">You&apos;re all caught up.</p>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: '22px', color: 'var(--ink)' }}>
+        You&apos;re all caught up.
+      </p>
+      <p className="mt-1.5 text-sm" style={{ color: 'var(--mut)' }}>
         Nothing needs your input right now.
       </p>
     </div>
@@ -143,9 +173,9 @@ function SkeletonRows() {
       {[0, 1, 2].map((i) => (
         <li
           key={i}
-          className="flex items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4"
+          className="panel flex items-center gap-4 px-4 py-3.5"
         >
-          <div className="size-9 shrink-0 animate-pulse rounded-xl bg-muted" />
+          <div className="size-9 shrink-0 animate-pulse rounded-lg bg-muted" />
           <div className="min-w-0 flex-1 space-y-2">
             <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
             <div className="h-3 w-2/3 animate-pulse rounded bg-muted/70" />

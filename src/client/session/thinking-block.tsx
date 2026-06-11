@@ -4,11 +4,11 @@
  * Visually distinct, COLLAPSIBLE block, separate from assistant text. Collapsed
  * by default; a header toggles it. Streams incrementally — the body shows the
  * growing `thinking` text as escaped plain text (no markdown; escaping keeps
- * any embedded markup inert). Left-border accent in the `thinking` token color.
+ * any embedded markup inert). Quiet Instrument `.thinking` atom: purple accent
+ * rail, italic muted toggle + body; CSS drives reveal via the `.open` class.
  */
 
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
 import { escapeText } from '../render/sanitize.js';
 
@@ -21,34 +21,20 @@ export interface ThinkingBlockProps {
 export function ThinkingBlock({ thinking, inProgress }: ThinkingBlockProps) {
   const [open, setOpen] = useState(false);
   // Auto-reveal while actively streaming; user can still collapse; defaults
-  // collapsed once finished.
+  // collapsed once finished. The `.open` class on `.thinking` drives both the
+  // chevron rotation and `.think-body` display (Phase A atom CSS).
   const bodyVisible = inProgress || open;
 
   return (
-    <div
-      className="border-l-[3px] rounded-r-md my-1.5 bg-[var(--thinking)]/5"
-      style={{ borderLeftColor: 'var(--thinking)' }}
-    >
-      <div
-        className="cursor-pointer select-none px-[10px] py-[5px] flex gap-1.5 items-center"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <ChevronRight
-          className={cn(
-            'size-3 shrink-0 transition-transform duration-[0.12s] text-muted-foreground/60',
-            bodyVisible && 'rotate-90',
-          )}
-        />
-        <span className="text-xs text-muted-foreground/60 italic">
-          Thinking{inProgress ? '…' : ''}
-        </span>
+    <div className={cn('thinking', bodyVisible && 'open')}>
+      <div className="think-toggle" onClick={() => setOpen((v) => !v)}>
+        <span className="chev">▶</span>
+        Thinking{inProgress ? '…' : ''}
       </div>
-      {bodyVisible && (
-        <div
-          className="px-3 pb-[10px] pt-[2px] whitespace-pre-wrap text-[13px] opacity-85"
-          dangerouslySetInnerHTML={{ __html: escapeText(thinking) }}
-        />
-      )}
+      <div
+        className="think-body whitespace-pre-wrap"
+        dangerouslySetInnerHTML={{ __html: escapeText(thinking) }}
+      />
     </div>
   );
 }

@@ -13,19 +13,25 @@
  */
 
 import type { ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useProfile, useCapability } from '../profile/provider.js';
-import { Sidebar, NavInboxBadge } from './sidebar.js';
+import { Sidebar } from './sidebar.js';
 import { ProfileSwitcher } from './profile-switcher.js';
+import { OperatorDock } from './operator-dock.js';
+import { OperatorRail } from './operator-rail.js';
 import { useViews } from '../lib/use-views.js';
 import { useInboxCount } from '../lib/use-decks.js';
 import { cn } from '@/lib/utils.js';
 
+/** The node-console route collapses the dock to a 58px rail (Rail Mode). */
+const RAIL_ROUTE = /^\/(nodes|c)\//;
+
 export function AppShell({ children }: { children: ReactNode }) {
   const profile = useProfile();
+  const location = useLocation();
   const isViewsHost = useCapability('views.host');
   // Layout chooser (the one permitted density read): comfortable → sidebar app
-  // shell; compact → the page keeps its own top-chrome.
+  // shell; compact → the Operator left dock wraps the page outlet.
   const sidebarLayout = profile.density === 'comfortable';
   // Views-first Studio bar: views.host granted + comfortable (Studio audience).
   const studioBar = isViewsHost && sidebarLayout;
@@ -40,50 +46,37 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  // Compact (Operator) audience → left dock, collapsed to a rail on the console
+  // route. The dock owns the profile switcher in its footer.
+  if (!sidebarLayout) {
+    const rail = RAIL_ROUTE.test(location.pathname);
+    return (
+      <div className="flex h-full min-h-0">
+        {rail ? (
+          <OperatorRail nav={profile.nav} home={home} />
+        ) : (
+          <OperatorDock nav={profile.nav} home={home} />
+        )}
+        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+      </div>
+    );
+  }
+
+  // Fallback: a comfortable audience without views.host gets the header +
+  // persistent left Sidebar.
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-border bg-card/40 px-3">
-        <div className="flex min-w-0 items-center gap-4">
-          <Link to={home} className="text-sm font-semibold tracking-tight text-foreground">
-            crouter
-          </Link>
-          {/* A compact-density profile (Operator) has no sidebar, so the nav
-              manifest renders inline in the header here. A comfortable one
-              (Studio) gets the left Sidebar below and skips this. */}
-          {!sidebarLayout && (
-            <nav aria-label="Primary" className="flex items-center gap-1">
-              {profile.nav.map((item) => (
-                <NavLink
-                  key={item.id}
-                  to={item.path}
-                  end={item.path === '/'}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors',
-                      isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-foreground/60 hover:bg-accent hover:text-foreground',
-                    )
-                  }
-                >
-                  <span>{item.label}</span>
-                  {item.id === 'inbox' && <NavInboxBadge />}
-                </NavLink>
-              ))}
-            </nav>
-          )}
-        </div>
+        <Link to={home} className="text-sm font-semibold tracking-tight text-foreground">
+          crouter
+        </Link>
         <ProfileSwitcher />
       </header>
 
-      {sidebarLayout ? (
-        <div className="flex min-h-0 flex-1">
-          <Sidebar nav={profile.nav} />
-          <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1">{children}</div>
-      )}
+      <div className="flex min-h-0 flex-1">
+        <Sidebar nav={profile.nav} />
+        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+      </div>
     </div>
   );
 }

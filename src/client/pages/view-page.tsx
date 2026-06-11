@@ -47,9 +47,10 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
     <div className="flex h-full min-h-0">
       {/* ── main view area ── */}
       <div className="min-h-0 flex-1 overflow-auto px-11 py-8">
-        {/* header */}
-        <div className="mb-1 flex items-end gap-4">
+        {/* view-head: Fraunces italic title · provenance · switch */}
+        <div className="flex items-end" style={{ gap: '18px', marginBottom: '6px' }}>
           <h1
+            className="view-title"
             style={{
               fontFamily: 'var(--font-display)',
               fontStyle: 'italic',
@@ -57,32 +58,37 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
               fontSize: '36px',
               letterSpacing: '-0.01em',
               lineHeight: 1.1,
-              color: 'var(--foreground)',
+              color: 'var(--ink)',
             }}
           >
             {view.title}
           </h1>
+          <div style={{ fontSize: '12px', color: 'var(--mut)', paddingBottom: '7px' }}>
+            {view.built_by ? (
+              <>
+                built by{' '}
+                <span className="mono" style={{ color: 'var(--dim)', fontSize: '11px' }}>
+                  {view.built_by}
+                </span>{' '}
+                · updated {relativeTime(view.updated_at)} · only you
+              </>
+            ) : (
+              <>updated {relativeTime(view.updated_at)} · only you</>
+            )}
+          </div>
+          <div
+            className="ml-auto flex items-center"
+            style={{ gap: '9px', paddingBottom: '6px', fontSize: '11.5px', color: 'var(--mut)' }}
+          >
+            switch view <span className="kbd">⌘K</span>
+          </div>
         </div>
-        <p className="mb-0 text-[12px] text-muted-foreground">
-          {view.built_by ? (
-            <>
-              built by{' '}
-              <span
-                className="text-muted-foreground/70"
-                style={{ fontFamily: 'var(--font-code)', fontSize: '11px' }}
-              >
-                {view.built_by}
-              </span>{' '}
-              ·{' '}
-            </>
-          ) : (
-            'kept up to date for you · '
-          )}
-          refreshed {relativeTime(view.updated_at)}
-        </p>
 
         {/* view-local tabs */}
-        <div className="mb-6 mt-[18px] flex gap-0.5 border-b border-border">
+        <div
+          className="flex border-b border-border"
+          style={{ gap: '2px', margin: '18px 0 26px' }}
+        >
           {view.tabs.map((t) => {
             const isActive = t.id === activeTab?.id;
             return (
@@ -93,12 +99,16 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
                   navigate(`/views/${encodeURIComponent(view.id)}/${encodeURIComponent(t.id)}`)
                 }
                 className={cn(
-                  'px-4 pb-2.5 pt-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'border-b-2 border-foreground text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
+                  'transition-colors',
+                  isActive ? 'text-[color:var(--ink)]' : 'text-[color:var(--mut)] hover:text-[color:var(--ink2)]',
                 )}
-                style={{ marginBottom: '-1px' }}
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  padding: '9px 16px',
+                  marginBottom: '-1px',
+                  borderBottom: `2px solid ${isActive ? 'var(--bone)' : 'transparent'}`,
+                }}
               >
                 {t.label}
               </button>
@@ -108,6 +118,26 @@ export function ViewPage({ viewId, tab }: { viewId: string; tab?: string }): Rea
 
         {/* block content */}
         {activeTab && <BlockRenderer blocks={activeTab.blocks} />}
+
+        {/* view-foot */}
+        <div
+          className="flex items-center"
+          style={{ marginTop: '14px', gap: '10px', fontSize: '11.5px', color: 'var(--dim)' }}
+        >
+          <span
+            className="instlabel"
+            style={{
+              border: '1px solid var(--line)',
+              borderRadius: '99px',
+              padding: '3px 11px',
+              fontSize: '8.5px',
+              color: 'var(--mut)',
+            }}
+          >
+            view
+          </span>
+          Assembled by the swarm from node reports — edit, pin, or share it like any view.
+        </div>
       </div>
 
       {/* ── chat drawer — live session for built_by node ── */}

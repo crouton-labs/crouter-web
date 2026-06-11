@@ -203,7 +203,7 @@ function InboundView({ message }: { message: UserMessage }) {
   const sender = extractInboxSender(raw);
   const peekablePaths = extractPeekablePaths(raw);
 
-  // Render body text with peekable paths linkified inline.
+  // Render body text with peekable paths linkified inline via the `.filelink` atom.
   function renderBody(text: string) {
     if (peekablePaths.length === 0) {
       return <span className="whitespace-pre-wrap">{text}</span>;
@@ -218,18 +218,13 @@ function InboundView({ message }: { message: UserMessage }) {
       if (idx > 0) parts.push(<span key={key++} className="whitespace-pre-wrap">{remaining.slice(0, idx)}</span>);
       const isActive = peekedPath === path;
       parts.push(
-        <button
+        <span
           key={key++}
-          type="button"
           onClick={(e) => { e.stopPropagation(); onPeek(path); }}
-          className={[
-            'font-mono text-[10.5px] text-[var(--color-muted-foreground)]',
-            'hover:text-[var(--color-status-done)] cursor-pointer',
-            isActive ? 'underline' : 'underline decoration-dotted',
-          ].join(' ')}
+          className={['filelink text-[10.5px]', isActive && 'peeked'].filter(Boolean).join(' ')}
         >
           {path}
-        </button>,
+        </span>,
       );
       remaining = remaining.slice(idx + path.length);
     }
@@ -238,24 +233,19 @@ function InboundView({ message }: { message: UserMessage }) {
   }
 
   return (
-    <div className="flex gap-3 px-4 py-3 rounded-[10px] border border-border border-l-2 border-l-[var(--color-status-done)] bg-[color-mix(in_oklch,var(--color-status-done)_4%,transparent)]">
-      {/* icon */}
-      <span className="text-[13px] text-[var(--color-status-done)] pt-[1px] flex-none select-none">◍</span>
-      <div className="min-w-0 flex-1">
-        {/* header */}
-        <div className="font-mono text-[8.5px] tracking-[0.14em] uppercase text-[var(--color-status-done)] mb-1 flex gap-2 items-center">
+    <div className="inbound">
+      <span className="ic select-none">◍</span>
+      <div className="body">
+        <div className="src">
           <span>inbox</span>
           {sender && (
             <>
-              <span className="text-[var(--color-muted-foreground)]">·</span>
+              <span>·</span>
               <span>from {sender}</span>
             </>
           )}
         </div>
-        {/* body */}
-        <div className="text-[13px] text-muted-foreground leading-[1.55]">
-          {renderBody(raw)}
-        </div>
+        {renderBody(raw)}
       </div>
     </div>
   );

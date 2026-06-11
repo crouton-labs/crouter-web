@@ -9,13 +9,14 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check } from 'lucide-react';
 import type { DeckSummary } from '../../shared/protocol.js';
 import { useDecks } from '../lib/use-decks.js';
-import { getDeck, resolveDeck, RestError } from '../api/rest.js';
+import { getDeck, resolveDeck, RestError } from '../net/rest.js';
 import { DECK_KIND_META, waitedFor } from '../lib/deck-presentation.js';
 import { toast } from '../lib/toast.js';
-import { Button } from '@/components/ui/button.js';
+
+/** Inline `--i` reveal-stagger var without fighting the CSSProperties type. */
+const rvStyle = (i: number): React.CSSProperties => ({ ['--i' as string]: i }) as React.CSSProperties;
 
 // ─── inline resolve helper (mirrors inline-asks.tsx; kept local to avoid
 //     touching that file since it's owned by the other agent) ─────────────────
@@ -47,28 +48,14 @@ export function NeedsYouStrip(): React.ReactElement | null {
   if (loading || decks.length === 0) return null;
 
   return (
-    <section className="relative z-[1] mb-4">
-      {/* header row */}
-      <div className="mb-3 flex items-center gap-3">
-        <span
-          className="instlabel"
-          style={{ color: 'var(--status-blocked)' }}
-        >
-          Needs you — {decks.length} blocked
-        </span>
-        {/* gradient hairline */}
-        <div
-          className="h-px flex-1"
-          style={{
-            background:
-              'linear-gradient(to right, var(--status-blocked), transparent)',
-            opacity: 0.4,
-          }}
-        />
+    <section className="needs rv" style={rvStyle(3)}>
+      <div className="needs-head">
+        <span className="flag">⚑</span>
+        <span className="instlabel">Needs you — {decks.length} blocked</span>
+        <div className="rule" />
       </div>
 
-      {/* 2-col card grid */}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="needs-grid">
         {decks.map((deck) => (
           <DeckCard key={deck.id} deck={deck} />
         ))}
@@ -90,7 +77,6 @@ function DeckCard({ deck }: { deck: DeckSummary }): React.ReactElement {
   >(null);
   const [optionsFetching, setOptionsFetching] = useState(false);
 
-  const Icon = DECK_KIND_META[deck.kind].icon;
   const kindLabel = DECK_KIND_META[deck.kind].label;
   const age = waitedFor(deck.blocked_since);
 
@@ -183,107 +169,73 @@ function DeckCard({ deck }: { deck: DeckSummary }): React.ReactElement {
     decisionOptions.length > 0;
 
   return (
-    <div
-      className="panel-raise flex flex-col gap-2.5 rounded-lg border p-3"
-      style={{
-        background: 'var(--card)',
-        borderColor: 'oklch(0.66 0.21 33 / 18%)',
-      }}
-    >
-      {/* top row: kind chip + node name + age */}
-      <div className="flex items-center gap-2">
-        {/* kind chip */}
-        <span
-          className="instlabel inline-flex items-center gap-1 rounded px-1.5 py-0.5"
-          style={{
-            background: 'oklch(0.66 0.21 33 / 12%)',
-            color: 'var(--status-blocked)',
-          }}
-        >
-          <Icon className="size-2.5" />
-          {kindLabel}
-        </span>
-
-        {/* asking node name — mono */}
-        <span
-          className="min-w-0 flex-1 truncate text-xs"
-          style={{ fontFamily: 'var(--font-inst)', color: 'var(--muted-foreground)' }}
-        >
-          {deck.asking_node_name}
-        </span>
-
-        {/* age — right-aligned */}
-        <span
-          className="shrink-0 text-xs tabular-nums"
-          style={{ color: 'var(--status-blocked)', opacity: 0.7 }}
-        >
-          blocked {age}
-        </span>
+    <div className="deck">
+      <div className="deck-meta">
+        <span className="deck-kind">{kindLabel}</span>
+        <span className="from">{deck.asking_node_name}</span>
+        <span className="age">blocked {age}</span>
       </div>
 
-      {/* deck title */}
-      <p className="line-clamp-2 text-sm font-medium leading-snug">{deck.title}</p>
+      <p className="deck-q line-clamp-2">{deck.title}</p>
 
-      {/* actions row */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="deck-actions">
         {/* notify → ack */}
         {deck.kind === 'notify' && (
-          <Button
-            size="sm"
+          <button
+            type="button"
+            className="btn sm"
             disabled={busy}
             onClick={() => void handleResolve('ack')}
-            className="h-7 text-xs"
           >
-            <Check className="mr-1 size-3" /> Got it
-          </Button>
+            Got it
+          </button>
         )}
 
         {/* validation → approve / reject */}
         {deck.kind === 'validation' && (
           <>
-            <Button
-              size="sm"
+            <button
+              type="button"
+              className="btn sm primary"
               disabled={busy}
               onClick={() => void handleResolve('yes')}
-              className="h-7 text-xs"
             >
               Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
+            </button>
+            <button
+              type="button"
+              className="btn sm"
               disabled={busy}
               onClick={() => void handleResolve('no')}
-              className="h-7 text-xs"
             >
               Reject
-            </Button>
+            </button>
           </>
         )}
 
         {/* decision ≤3 options → inline option buttons */}
         {showDecisionButtons &&
           decisionOptions!.map((opt) => (
-            <Button
+            <button
               key={opt.id}
-              size="sm"
-              variant="outline"
+              type="button"
+              className="btn sm"
               disabled={busy}
               onClick={() => void handleDecisionOption(opt.id)}
-              className="h-7 text-xs"
             >
               {opt.label}
-            </Button>
+            </button>
           ))}
 
         {/* "open thread →" quiet link — always present */}
         <button
           type="button"
+          className="btn sm"
           disabled={busy}
           onClick={() => navigate(`/inbox/${encodeURIComponent(deck.id)}`)}
-          className="ml-auto flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          style={{ marginLeft: 'auto', borderColor: 'transparent', color: 'var(--dim)' }}
         >
-          open thread <ArrowRight className="size-3" />
+          open thread →
         </button>
       </div>
     </div>

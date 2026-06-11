@@ -1,15 +1,13 @@
 /**
  * Per-node chrome, split into the two slots of the session screen (design
- * §3.3): TitleBar = identity (name/kind/mode/lifecycle/status), the `header`
- * slot (no capability — always present); ChromePanel = live chrome
- * (cwd/branch/model/token burn/context usage/tool activity/stats), the `chrome`
- * slot (capability `node.internals`). Identity comes from the page-fetched node
- * detail; live chrome comes from the session store's server-pushed chrome +
- * state (D12 — rendered, never computed from raw events). The streaming/idle
- * indicator (C.10) reads state.isStreaming. A dormant view (source==='static')
- * is marked "last-known, not live" and omits tool_calls/stats/context% per F.4.
- * For Operator both slots render together inside the page's flex-col wrapper,
- * reproducing the previous single ChromeBar exactly.
+ * §3.3): TitleBar = identity (Fraunces name + kind/mode/lifecycle meta + status
+ * badge), the `header` slot (no capability — always present); ChromePanel = the
+ * instrument cluster (context-% and cost gauges + turns/msgs/tokens/tools
+ * dials), the `chrome` slot (capability `node.internals`). Identity comes from
+ * the page-fetched node detail; the gauges come from the session store's
+ * server-pushed chrome + state (D12 — rendered, never computed from raw events).
+ * A dormant view (source==='static') is marked "last-known" and omits the
+ * live-only readings (context %, tool activity, stats) per F.4.
  */
 
 import type { ReactNode } from 'react';
@@ -99,46 +97,62 @@ export function TitleBar(props: {
     ? livePillStatus(d, props.store.source, props.store.brokerStatus, streaming)
     : null;
 
+  if (!d) {
+    return <h2 className="con-title" style={CON_TITLE}>…</h2>;
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-        {d ? (
-          <>
-            <span className="truncate text-[21px] font-semibold" style={{ fontFamily: 'var(--font-display, serif)' }}>{d.name}</span>
-            <Chip>{d.kind}</Chip>
-            <Chip>{d.mode}</Chip>
-            <Chip>{d.lifecycle}</Chip>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-xs"
-              style={{ color: `var(--status-${pillStatus})`, borderColor: `var(--status-${pillStatus})66` }}
-            >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ backgroundColor: `var(--status-${pillStatus})` }}
-              />
-              {pillStatus}
-            </span>
-          </>
-        ) : (
-          <span className="font-mono text-sm font-semibold">…</span>
-        )}
-      <span
-        className={cn('font-mono text-xs', streaming ? 'text-success' : 'text-muted-foreground')}
+    <>
+      <h2 className="con-title min-w-0 truncate" style={CON_TITLE} title={d.name}>
+        {d.name}
+      </h2>
+      <div
+        className="flex shrink-0 items-center gap-[13px] text-[11px]"
+        style={{ color: 'var(--mut)' }}
       >
-        {streaming ? '● streaming' : '○ idle'}
-      </span>
-      {dormant && (
-        <span
-          className="font-mono text-xs text-warning"
-          title="dormant node — last-known values, not live"
-        >
-          last-known (not live)
+        <span>
+          kind <b style={META_B}>{d.kind}</b>
+        </span>
+        <span>
+          mode <b style={META_B}>{d.mode}</b>
+        </span>
+        <span>
+          <b style={META_B}>{d.lifecycle}</b>
+        </span>
+      </div>
+      {pillStatus && (
+        <span className={cn('badge', pillStatus)}>
+          <span className={cn('dot', pillStatus)} />
+          {pillStatus}
         </span>
       )}
-    </div>
+      {dormant && (
+        <span
+          className="font-mono text-[11px]"
+          style={{ color: 'var(--idle)' }}
+          title="dormant node — last-known values, not live"
+        >
+          last-known
+        </span>
+      )}
+    </>
   );
 }
 
-/** Live chrome line — the `chrome` slot (capability `node.internals`). */
+const CON_TITLE = {
+  fontFamily: 'var(--font-display)',
+  fontWeight: 480,
+  fontSize: '21px',
+} as const;
+const META_B = { color: 'var(--ink2)', fontWeight: 500 } as const;
+
+/**
+ * Instrument cluster — the `chrome` slot's richer readout (capability
+ * `node.internals`). Two gauges (context usage %, session cost) plus a row of
+ * dials (turns, messages, tokens, tools). Quiet Instrument `.cluster` / `.gauge`
+ * / `.gbar` / `.dials` / `.dial`. A dormant node omits the live-only readings
+ * (context %, tool activity, stats) per F.4 — nothing to render → null.
+ */
 export function ChromePanel(props: {
   store: ChromeBarStore;
   detail: NodeDetail | null;
@@ -146,77 +160,105 @@ export function ChromePanel(props: {
   const chrome = props.store.chrome;
   const dormant = props.store.source === 'static';
   const streaming = props.store.state?.isStreaming ?? false;
-  const d = props.detail;
+  const ctx = chrome.context;
+  const stats = chrome.stats;
+  const tokens = chrome.tokens;
+
+  // Context % is live-only (needs the window denominator); a dormant node shows
+  // just the raw token count with no bar.
+  const pct = ctx && !dormant ? ctx.percent : null;
+  const cost = !dormant && stats?.cost !== undefined ? stats.cost : null;
+
+  // Nothing meaningful to gauge yet → render nothing rather than an empty rail.
+  if (!ctx && cost === null && !stats && !tokens) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-muted-foreground">
-        {d?.cwd && (
-          <Field label="cwd" title={d.cwd} className="min-w-0">
-            <span className="truncate">{d.cwd}</span>
-          </Field>
+    <div className="cluster">
+      {ctx && (
+        <div className="gauge">
+          <div className="glabel">
+            <span className="instlabel">Context</span>
+            <span className="gval">
+              {pct === null ? '—' : fmtPercent(pct)}
+              {pct !== null && <span className="u">%</span>}
+            </span>
+          </div>
+          <div className="gbar">
+            <i style={{ width: pct === null ? '0%' : `${Math.min(100, pct)}%` }} />
+          </div>
+          <div className="gsub">
+            {ctx.tokens.toLocaleString()}
+            {!dormant && <> / {ctx.window.toLocaleString()}</>}
+          </div>
+        </div>
+      )}
+
+      {cost !== null && (
+        <div className="gauge">
+          <div className="glabel">
+            <span className="instlabel">Cost</span>
+            <span className="gval">
+              <span className="u" style={{ marginLeft: 0, marginRight: 2 }}>$</span>
+              {cost.toFixed(2)}
+            </span>
+          </div>
+          <div className="gbar">
+            <i style={{ width: `${Math.min(100, (cost / 5) * 100)}%` }} />
+          </div>
+          {stats && <div className="gsub">{stats.turns} turns</div>}
+        </div>
+      )}
+
+      <div className="dials">
+        {/* turns lives in the Cost gauge sub-line when cost is present; otherwise
+            surface it here so it is never lost. */}
+        {!dormant && stats && cost === null && (
+          <Dial value={String(stats.turns)} unit="turns" />
         )}
-        <Field label="branch">{chrome.branch ?? d?.branch ?? '—'}</Field>
-        <Field label="model">{chrome.model ?? '—'}</Field>
-        {chrome.tokens && (
-          <Field label="tokens" title="input / output / cache tokens">
-            {chrome.tokens.input.toLocaleString()} in / {chrome.tokens.output.toLocaleString()} out
-            {chrome.tokens.cache !== undefined && (
-              <> / {chrome.tokens.cache.toLocaleString()} cache</>
-            )}
-          </Field>
+        {!dormant && stats && (
+          <Dial
+            value={`${stats.user_messages}/${stats.assistant_messages}`}
+            unit="msgs"
+          />
         )}
-        {/* Context usage percent is omitted for a dormant node (no window denominator, F.4). */}
-        {chrome.context && (
-          <Field label="context">
-            {chrome.context.tokens.toLocaleString()}
-            {!dormant && (
-              <> / {chrome.context.window.toLocaleString()} ({fmtPercent(chrome.context.percent)}%)</>
-            )}
-          </Field>
+        {tokens && (
+          <Dial
+            value={`${fmtTokens(tokens.input)} → ${fmtTokens(tokens.output)}`}
+            unit="tokens"
+          />
         )}
-        {/* tool-call activity + session stats are live-only (F.4). */}
         {!dormant && chrome.tool_calls !== null && (
-          <Field label="tools" className={cn(streaming && 'text-success')}>
-            {chrome.tool_calls}
-          </Field>
+          <Dial value={String(chrome.tool_calls)} unit="tools" hot={streaming} />
         )}
-        {!dormant && chrome.stats && (
-          <Field label="turns" title="turns · user / assistant messages">
-            {chrome.stats.turns} · {chrome.stats.user_messages}/{chrome.stats.assistant_messages} msgs
-            {chrome.stats.cost !== undefined && <> · ${chrome.stats.cost.toFixed(2)}</>}
-          </Field>
-        )}
+      </div>
     </div>
   );
 }
 
-/** A muted identity chip (kind / mode / lifecycle). */
-function Chip({ children }: { children: ReactNode }): ReactNode {
+/** A single dial readout: `value` over a dim `unit` label. */
+function Dial({
+  value,
+  unit,
+  hot,
+}: {
+  value: string;
+  unit: string;
+  hot?: boolean;
+}): ReactNode {
   return (
-    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-      {children}
-    </span>
+    <div className="dial">
+      <span className="dval" style={hot ? { color: 'var(--act)' } : undefined}>
+        {value} <em>{unit}</em>
+      </span>
+    </div>
   );
 }
 
-/** A labelled `LABEL value` stat field. */
-function Field({
-  label,
-  children,
-  title,
-  className,
-}: {
-  label: string;
-  children: ReactNode;
-  title?: string;
-  className?: string;
-}): ReactNode {
-  return (
-    <span className={cn('inline-flex items-center gap-1', className)} title={title}>
-      <span className="uppercase tracking-wide text-muted-foreground/50">{label}</span>
-      {children}
-    </span>
-  );
+/** Compact token count (e.g. 31480 → 31k). */
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${Math.round(n / 100_000) / 10}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
 }
 
 /** Trim float noise from a context-usage percent (e.g. 0.87399999 → 0.874),

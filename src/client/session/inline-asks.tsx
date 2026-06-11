@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Check } from 'lucide-react';
 import type { DeckSummary } from '../../shared/protocol.js';
 import { useConversationDecks, useDecks } from '../lib/use-decks.js';
-import { resolveDeck, getDeck, RestError } from '../api/rest.js';
+import { resolveDeck, getDeck, RestError } from '../net/rest.js';
 import { DECK_KIND_META } from '../lib/deck-presentation.js';
 import { toast } from '../lib/toast.js';
 import { Button } from '@/components/ui/button.js';

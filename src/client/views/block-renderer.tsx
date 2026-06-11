@@ -1,33 +1,34 @@
 /**
  * Renders an array of ViewBlock[] — the typed content blocks within a view tab.
- * Three block kinds: kpis, barlist, markdown. Layout follows the mockup grid.
+ * Three block kinds: kpis, barlist, markdown. Layout follows the Quiet Instrument
+ * view host (design §7): KPIs span full width, then a barlist (chart panel) and a
+ * markdown body (findings panel) pair side-by-side in a 7fr/5fr grid.
  */
 
 import { useMemo } from 'react';
 import type { ViewBlock } from '../../shared/protocol.js';
 import { renderMarkdown } from '../render/markdown.js';
-import { cn } from '@/lib/utils.js';
+import { KpiGrid } from '../components/kpi-card.js';
+import { FindingsList } from '../components/findings-list.js';
 
 export function BlockRenderer({ blocks }: { blocks: ViewBlock[] }): React.ReactElement {
-  // Pair barlist+markdown side-by-side when they appear together (7fr 5fr grid),
-  // matching Surface 3/4. KPIs always span full width above.
   const kpiBlocks = blocks.filter((b) => b.kind === 'kpis');
   const gridBlocks = blocks.filter((b) => b.kind === 'barlist' || b.kind === 'markdown');
+  const paired = gridBlocks.length >= 2;
 
   return (
     <div>
-      {kpiBlocks.map((block, i) => {
-        if (block.kind !== 'kpis') return null;
-        return <KpiGrid key={i} items={block.items} />;
-      })}
+      {kpiBlocks.map((block, i) =>
+        block.kind === 'kpis' ? <KpiGrid key={i} items={block.items} /> : null,
+      )}
 
       {gridBlocks.length > 0 && (
         <div
-          className={cn(
-            'mt-3 gap-3',
-            gridBlocks.length >= 2 ? 'grid' : 'flex flex-col',
-          )}
-          style={gridBlocks.length >= 2 ? { gridTemplateColumns: '7fr 5fr' } : undefined}
+          style={
+            paired
+              ? { display: 'grid', gridTemplateColumns: '7fr 5fr', gap: '12px' }
+              : { display: 'flex', flexDirection: 'column', gap: '12px' }
+          }
         >
           {gridBlocks.map((block, i) => {
             if (block.kind === 'barlist') return <BarListBlock key={i} block={block} />;
@@ -40,72 +41,7 @@ export function BlockRenderer({ blocks }: { blocks: ViewBlock[] }): React.ReactE
   );
 }
 
-// ─── KPI grid ────────────────────────────────────────────────────────────────
-
-function isTextValue(value: string): boolean {
-  // Heuristic: if it doesn't start with a digit or $, treat as prose text.
-  return !/^[\d$]/.test(value.trim());
-}
-
-function KpiGrid({
-  items,
-}: {
-  items: { label: string; value: string; unit?: string; sub?: string }[];
-}): React.ReactElement {
-  return (
-    <div className="mb-3.5 grid grid-cols-4 gap-3">
-      {items.map((item, i) => (
-        <div
-          key={i}
-          className="rounded-lg border border-border bg-card px-[18px] pb-3.5 pt-4"
-          style={{ boxShadow: 'inset 0 1px 0 var(--raise, rgba(255,255,255,0.06))' }}
-        >
-          <span
-            className="instlabel block text-[11px] uppercase tracking-widest text-muted-foreground"
-          >
-            {item.label}
-          </span>
-          <div
-            className="mt-2"
-            style={
-              isTextValue(item.value)
-                ? {
-                    fontFamily: 'var(--font-display)',
-                    fontStyle: 'italic',
-                    fontWeight: 480,
-                    fontSize: '19px',
-                    letterSpacing: 0,
-                    color: 'var(--foreground)',
-                  }
-                : {
-                    fontFamily: 'var(--font-inst)',
-                    fontSize: '21px',
-                    fontWeight: 600,
-                    letterSpacing: '0.01em',
-                    color: 'var(--foreground)',
-                  }
-            }
-          >
-            {item.value}
-            {item.unit && (
-              <span
-                className="text-muted-foreground"
-                style={{ fontSize: '10px', fontWeight: 400 }}
-              >
-                {item.unit}
-              </span>
-            )}
-          </div>
-          {item.sub && (
-            <p className="mt-1 text-[11px] text-muted-foreground">{item.sub}</p>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Bar list ────────────────────────────────────────────────────────────────
+// ─── Bar list (chart panel) ──────────────────────────────────────────────────
 
 function BarListBlock({
   block,
@@ -116,56 +52,65 @@ function BarListBlock({
   const maxVal = Math.max(...rows.map((r) => r.max ?? r.value), 1);
 
   return (
-    <div
-      className="rounded-lg border border-border bg-card p-4"
-      style={{ boxShadow: 'inset 0 1px 0 var(--raise, rgba(255,255,255,0.06))' }}
-    >
-      {/* caption */}
-      <div className="mb-3 flex items-baseline gap-2">
-        <span className="text-sm font-semibold text-foreground">{title}</span>
+    <div className="panel" style={{ padding: '18px 20px 16px' }}>
+      {/* chart-cap */}
+      <div className="flex items-baseline" style={{ gap: '10px', marginBottom: '18px' }}>
+        <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)' }}>{title}</span>
       </div>
 
-      {/* rows */}
-      <div className="flex flex-col gap-2">
+      {/* bars */}
+      <div className="flex flex-col" style={{ gap: '11px' }}>
         {rows.map((row, i) => {
           const pct = Math.min(100, Math.round((row.value / maxVal) * 100));
-          const isTop = i === 0;
+          const top = i === 0;
           return (
-            <div key={i} className="flex items-center gap-2">
+            <div
+              key={i}
+              className="grid items-center"
+              style={{ gridTemplateColumns: '158px 1fr 52px', gap: '12px' }}
+            >
               {/* label */}
               <span
-                className="min-w-0 shrink-0 basis-[52%] truncate text-xs"
-                style={{ color: isTop ? 'var(--foreground)' : 'var(--foreground)/80' }}
+                className="truncate"
+                style={{ fontSize: '12px', color: 'var(--ink2)' }}
               >
                 {row.label}
                 {row.note && (
-                  <em className="ml-1 not-italic text-muted-foreground/60">
+                  <em style={{ fontStyle: 'normal', color: 'var(--dim)', fontSize: '10.5px', marginLeft: '6px' }}>
                     {row.note}
                   </em>
                 )}
               </span>
-              {/* bar */}
+
+              {/* track */}
               <div
-                className="h-1.5 flex-1 overflow-hidden rounded-full"
-                style={{ background: 'var(--border)' }}
+                className="relative overflow-hidden"
+                style={{
+                  height: '14px',
+                  borderRadius: '4px',
+                  background: 'color-mix(in oklch, var(--ink) 5%, transparent)',
+                }}
               >
                 <div
-                  className="h-full rounded-full"
+                  className="absolute inset-y-0 left-0"
                   style={{
                     width: `${pct}%`,
-                    background: isTop
-                      ? 'linear-gradient(90deg, #247d4b, rgba(36,125,75,.45))'
-                      : 'linear-gradient(90deg, rgba(var(--foreground-raw,100,100,100),.45), rgba(var(--foreground-raw,100,100,100),.25))',
+                    borderRadius: '4px',
+                    background: top
+                      ? 'linear-gradient(90deg, var(--act), color-mix(in oklch, var(--act) 50%, transparent))'
+                      : 'linear-gradient(90deg, color-mix(in oklch, var(--ink) 28%, transparent), color-mix(in oklch, var(--ink) 16%, transparent))',
                   }}
                 />
               </div>
+
               {/* value */}
               <span
-                className="shrink-0 tabular-nums"
+                className="tabular-nums"
                 style={{
                   fontFamily: 'var(--font-inst)',
-                  fontSize: '11px',
-                  color: isTop ? '#247d4b' : 'var(--muted-foreground)',
+                  fontSize: '10px',
+                  textAlign: 'right',
+                  color: top ? 'var(--act)' : 'var(--mut)',
                 }}
               >
                 {row.value}
@@ -178,7 +123,15 @@ function BarListBlock({
   );
 }
 
-// ─── Markdown block ──────────────────────────────────────────────────────────
+// ─── Markdown block (findings panel) ─────────────────────────────────────────
+
+/** Split a leading markdown heading off the body so the findings panel can host
+ *  it in the cap row (with the status chip) instead of inside the prose. */
+function splitLeadingHeading(text: string): { title?: string; body: string } {
+  const m = text.match(/^\s*#{1,6}\s+(.+?)\s*(?:\n|$)/);
+  if (!m) return { body: text };
+  return { title: m[1], body: text.slice(m[0].length) };
+}
 
 function MarkdownBlock({
   block,
@@ -187,18 +140,17 @@ function MarkdownBlock({
 }): React.ReactElement {
   const src = block.source;
   const text = 'inline' in src ? src.inline : '';
+  const sourcePath = 'path' in src ? src.path : undefined;
 
-  const html = useMemo(() => renderMarkdown(text), [text]);
+  // The QI findings panel hoists the body's leading heading into the cap row
+  // (where the status chip lives) and renders only the list/prose beneath it.
+  // Lift a leading `# …`/`## …` line into the title so it isn't duplicated.
+  const { title, body } = useMemo(() => splitLeadingHeading(text), [text]);
+  const html = useMemo(() => renderMarkdown(body), [body]);
 
-  return (
-    <div
-      className="rounded-lg border border-border bg-card p-4"
-      style={{ boxShadow: 'inset 0 1px 0 var(--raise, rgba(255,255,255,0.06))' }}
-    >
-      <div
-        className="prose prose-sm max-w-none dark:prose-invert"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    </div>
-  );
+  // Report files are named `<ts>-<kind>.md`; surface that kind as the panel's
+  // status chip (e.g. `…-final.md` → FINAL), matching the QI findings mockup.
+  const chip = sourcePath?.match(/-([a-z]+)\.md$/i)?.[1];
+
+  return <FindingsList html={html} title={title} chip={chip} sourcePath={sourcePath} />;
 }

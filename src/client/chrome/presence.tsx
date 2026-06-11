@@ -6,7 +6,6 @@
  */
 
 import type { ReactNode } from 'react';
-import { Button } from '@/components/ui/button.js';
 import type { Presence as PresenceData, WebRole } from '../../shared/protocol.js';
 
 /** React-compatible subset of the session store — plain values, not signal accessors. */
@@ -30,27 +29,32 @@ export function Presence(props: { store: PresenceStore }): ReactNode {
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-3 font-mono text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1" title="connected viewers">
+    <div className="ctl-state flex shrink-0 items-center gap-[10px]">
+      <span
+        className="inline-flex items-center gap-1"
+        title="connected viewers"
+        style={{ color: 'var(--mut)' }}
+      >
         👁 {presence.viewers}
       </span>
-      <span className="inline-flex items-center gap-1">
-        control: <strong className="text-foreground">{controllerLabel()}</strong>
+      <span className="inline-flex items-center gap-[5px]" style={{ color: 'var(--mut)' }}>
+        control:{' '}
+        <span style={{ color: 'var(--ink2)', fontStyle: 'italic' }}>{controllerLabel()}</span>
       </span>
       {isController ? (
-        <Button variant="secondary" size="sm" onClick={() => props.store.releaseControl()}>
+        <button type="button" className="btn sm" onClick={() => props.store.releaseControl()}>
           Release control
-        </Button>
+        </button>
       ) : (
-        <Button
-          variant="secondary"
-          size="sm"
+        <button
+          type="button"
+          className="btn primary sm"
           disabled={!props.store.socketReady}
           title={props.store.socketReady ? undefined : 'connecting…'}
           onClick={() => props.store.requestControl()}
         >
           Request control
-        </Button>
+        </button>
       )}
     </div>
   );

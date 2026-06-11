@@ -29,7 +29,7 @@ import type {
   WebRole,
   WsServerMsg,
 } from '../../shared/protocol.js';
-import { openSessionSocket, type SessionSocket } from '../api/session-socket.js';
+import { openSessionSocket, type SessionSocket } from '../net/session-socket.js';
 import { useServerStatus } from '../lib/server-status.js';
 
 /** Web-shaped chrome the SPA renders (mirrors `NodeDetail`'s chrome subset). */

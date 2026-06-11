@@ -20,7 +20,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check } from 'lucide-react';
 import type { DeckAnswer, DeckDetail, DeckInteraction } from '../../shared/protocol.js';
-import { getDeck, resolveDeck, RestError } from '../api/rest.js';
+import { getDeck, resolveDeck, RestError } from '../net/rest.js';
 import { renderMarkdown } from '../render/markdown.js';
 import { sanitizeHtml } from '../render/sanitize.js';
 import { DECK_KIND_META } from '../lib/deck-presentation.js';
@@ -101,12 +101,15 @@ export function DeckPage({ deckId }: { deckId: string }) {
       </button>
 
       <header className="mb-5 flex items-start gap-3">
-        <span className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <span
+          className="mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-lg"
+          style={{ border: '1px solid var(--line)', color: 'var(--ink2)', background: 'color-mix(in oklch, var(--ink) 4%, transparent)' }}
+        >
           <Icon className="size-5" />
         </span>
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">{deck.title}</h1>
-          {deck.subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{deck.subtitle}</p>}
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: 460, letterSpacing: '-0.01em', color: 'var(--ink)' }}>{deck.title}</h1>
+          {deck.subtitle && <p className="mt-0.5 text-sm" style={{ color: 'var(--mut)' }}>{deck.subtitle}</p>}
           <DeckProvenance deck={deck} className="mt-2" />
         </div>
       </header>
@@ -219,11 +222,7 @@ function Body({ body }: { body?: string }) {
 }
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <section className={cn('rounded-2xl border border-border bg-card p-5 shadow-sm', className)}>
-      {children}
-    </section>
-  );
+  return <section className={cn('panel p-5', className)}>{children}</section>;
 }
 
 function InteractionTitle({ it }: { it: DeckInteraction }) {
@@ -418,8 +417,8 @@ function ContextView({
       <InteractionTitle it={it} />
       {/* Why we need this — shown BEFORE the field (agentic-ux). */}
       {it.body && (
-        <div className="mb-4 rounded-xl border border-border/60 bg-muted/40 p-3">
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="mb-4 rounded-xl border border-border p-3" style={{ background: 'color-mix(in oklch, var(--ink) 3%, transparent)' }}>
+          <p className="instlabel mb-1.5">
             Why we&apos;re asking
           </p>
           <Body body={it.body} />

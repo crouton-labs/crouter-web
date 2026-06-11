@@ -1,10 +1,10 @@
 /**
  * Meta strip (2b) — one quiet mono line of node context for the `chrome` slot.
- * Replaces the telemetry-heavy ChromePanel for the Operator audience.
- * Format: ⎇ main +3 ~2 · ~/Code/project · claude-fable-5 · ctx 31k / 1M
+ * Quiet Instrument `.meta-strip`: mono, dim, with `·` separators and git
+ * add/mod hues. Format: ⎇ main +3 ~2 · ~/Code/project · claude-fable-5 · ctx 31k / 1M
  */
 
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { NodeDetail } from '../../shared/protocol.js';
 import type { NodeChrome } from '../store/session-store.js';
 
@@ -26,12 +26,12 @@ export function MetaStrip({ store, detail }: Props): ReactNode {
 
     parts.push(
       <span key="branch">
-        ⎇ {branch}
+        ⎇ <b style={B}>{branch}</b>
         {added > 0 && (
-          <span style={{ color: 'var(--status-active)' }}> +{added}</span>
+          <span style={{ color: 'var(--act)', opacity: 0.8 }}> +{added}</span>
         )}
         {modified > 0 && (
-          <span style={{ color: 'var(--status-idle)' }}> ~{modified}</span>
+          <span style={{ color: 'var(--idle)', opacity: 0.8 }}> ~{modified}</span>
         )}
       </span>,
     );
@@ -46,7 +46,11 @@ export function MetaStrip({ store, detail }: Props): ReactNode {
   // model
   const model = chrome.model ?? detail?.model ?? null;
   if (model !== null) {
-    parts.push(<span key="model">{model}</span>);
+    parts.push(
+      <span key="model">
+        <b style={B}>{model}</b>
+      </span>,
+    );
   }
 
   // ctx
@@ -54,7 +58,7 @@ export function MetaStrip({ store, detail }: Props): ReactNode {
   if (ctx !== null) {
     parts.push(
       <span key="ctx">
-        ctx {fmtK(ctx.tokens)} / {fmtK(ctx.window)}
+        ctx <b style={B}>{fmtK(ctx.tokens)}</b> / {fmtK(ctx.window)}
       </span>,
     );
   }
@@ -63,18 +67,30 @@ export function MetaStrip({ store, detail }: Props): ReactNode {
 
   return (
     <div
-      className="flex min-w-0 items-center gap-0 font-mono text-[11px] text-muted-foreground"
-      style={{ fontFamily: 'var(--font-code, monospace)' }}
+      className="flex min-w-0 items-center gap-[20px] whitespace-nowrap border-b text-[11px]"
+      style={{
+        padding: '8px 26px',
+        borderColor: 'var(--line)',
+        background: 'rgba(0,0,0,.18)',
+        fontFamily: 'var(--font-code)',
+        color: 'var(--mut)',
+      }}
     >
       {parts.map((part, i) => (
-        <span key={i} className="flex items-center">
-          {i > 0 && <span className="mx-1.5 select-none opacity-30">·</span>}
+        <Fragment key={i}>
+          {i > 0 && (
+            <span style={{ color: 'var(--dim)', opacity: 0.5 }} className="select-none">
+              ·
+            </span>
+          )}
           {part}
-        </span>
+        </Fragment>
       ))}
     </div>
   );
 }
+
+const B = { color: 'var(--ink2)', fontWeight: 400 } as const;
 
 /** Abbreviate home directory prefix with ~; fall back to last 2 path segments. */
 function abbreviateCwd(cwd: string): string {

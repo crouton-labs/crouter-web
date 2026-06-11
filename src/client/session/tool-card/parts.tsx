@@ -9,7 +9,7 @@
  */
 
 import { type ReactNode, createContext, useContext, useState } from 'react';
-import { Loader2, ChevronRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils.js';
 import type {
   ToolCall,
@@ -52,6 +52,25 @@ export const TERM_ERR = 'text-[#ff9b8a]';
 
 /** Italic muted placeholder (`.cw-empty`). */
 export const EMPTY_CLASSES = 'px-[11px] py-2 opacity-50 text-xs italic';
+
+/**
+ * Quiet Instrument tool glyph — the monogram in the `.tool-glyph` square,
+ * keyed on canonical tool name (same alias collapsing as the registry). All
+ * glyphs are Unicode text, no images (mockup convention).
+ */
+const TOOL_GLYPH: Record<string, string> = {
+  bash: '❯', shell: '❯', sh: '❯', run: '❯', terminal: '❯',
+  read: '≣', read_file: '≣', cat: '≣', view: '≣',
+  edit: '✎', str_replace: '✎', apply_patch: '✎',
+  write: '✚', write_file: '✚', create: '✚',
+  grep: '⌕', search: '⌕', rg: '⌕',
+  web_search: '◎', websearch: '◎', web: '◎',
+  fetch: '⤓', curl: '⤓', http: '⤓',
+};
+
+function toolGlyph(name: string): string {
+  return TOOL_GLYPH[(name || '').toLowerCase()] ?? '◆';
+}
 
 /** Contract for every tool-card renderer (paired call + result). */
 export interface ToolCardProps {
@@ -132,65 +151,58 @@ export function ToolCardShell({ call, subtitle, inProgress, isError, children }:
   const defaultExpanded = inProgress || density !== 'compact';
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  // inProgress always forces open regardless of toggle state
+  // inProgress always forces open regardless of toggle state. The `.open` class
+  // on `.tool` drives chevron rotation + `.tool-body` reveal (Phase A atom CSS).
   const bodyVisible = inProgress || expanded;
 
   return (
     <div
-      className={cn(
-        'border rounded-lg my-1.5 overflow-hidden bg-card text-card-foreground',
-        isError && 'border-destructive',
-      )}
+      className={cn('tool', bodyVisible && 'open')}
+      style={isError ? { borderColor: 'var(--blk)' } : undefined}
     >
       {/* Header — clickable toggle */}
-      <button
-        type="button"
-        className="w-full flex items-center gap-2 px-[10px] py-[6px] bg-muted/50 text-left cursor-pointer hover:bg-muted/70 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <ChevronRight
-          className={cn('size-3 shrink-0 transition-transform duration-[0.12s] text-muted-foreground/60', bodyVisible && 'rotate-90')}
-        />
-        <span className={cn('font-mono text-[11px] uppercase tracking-[0.08em] font-medium', !raw && 'font-sans normal-case tracking-normal text-[12px]')}>{title}</span>
+      <div className="tool-head" onClick={() => setExpanded((v) => !v)}>
+        <span className="tool-glyph">{toolGlyph(call.name)}</span>
+        <span className={cn('tool-name', !raw && 'normal-case font-sans tracking-normal text-[12px]')}>{title}</span>
         {sub && (
-          isPeekablePath(sub) ? (
-            <span
-              className={cn(
-                'font-mono text-[10.5px] opacity-50 truncate cursor-pointer',
-                peekedPath === sub ? 'underline' : 'underline decoration-dotted',
-                'hover:text-[var(--bone)] hover:opacity-100',
-              )}
-              onClick={(e) => { e.stopPropagation(); onPeek(sub); }}
-            >
-              {sub}
-            </span>
-          ) : (
-            <span className={cn('font-mono text-[10.5px] opacity-50 truncate', !raw && 'font-sans')}>
-              {sub}
-            </span>
-          )
+          <span className="tool-arg">
+            {isPeekablePath(sub) ? (
+              <span
+                className={cn('filelink', peekedPath === sub && 'peeked')}
+                onClick={(e) => { e.stopPropagation(); onPeek(sub); }}
+              >
+                {sub}
+              </span>
+            ) : (
+              sub
+            )}
+          </span>
         )}
-        {/* Status pill — .cw-pill-* equivalent */}
-        <div className="ml-auto shrink-0">
+        {/* Status chip — .chip atom + state-tinted variants */}
+        <span className="ml-auto shrink-0 flex items-center">
           {inProgress ? (
-            <span className="inline-flex items-center gap-1 text-[10.5px] px-[7px] py-[1px] rounded-full bg-blue-950/70 text-blue-300 whitespace-nowrap">
+            <span
+              className="chip inline-flex items-center gap-1"
+              style={{ color: 'var(--idle)', background: 'var(--idle-dim)', border: '1px solid var(--line2)' }}
+            >
               <Loader2 className="w-2.5 h-2.5 animate-spin" />
               running
             </span>
           ) : isError ? (
-            <span className="inline-flex items-center text-[10.5px] px-[7px] py-[1px] rounded-full bg-destructive/20 text-destructive-foreground border border-destructive/40 whitespace-nowrap">
+            <span
+              className="chip"
+              style={{ color: 'var(--blk)', background: 'var(--blk-dim)', border: '1px solid var(--blk)' }}
+            >
               error
             </span>
           ) : (
-            <span className="inline-flex items-center text-[10.5px] px-[7px] py-[1px] rounded-full whitespace-nowrap"
-              style={{ background: 'oklch(0.72 0.16 145 / 0.2)', color: 'var(--success)' }}>
-              done
-            </span>
+            <span className="chip ok">done</span>
           )}
-        </div>
-      </button>
-      {/* Body slot — shown only when expanded or in-progress */}
-      {bodyVisible && <div>{children}</div>}
+        </span>
+        <span className="chev">▶</span>
+      </div>
+      {/* Body — always in DOM; `.tool-body` CSS hides it unless `.open` is set. */}
+      <div className="tool-body">{children}</div>
     </div>
   );
 }

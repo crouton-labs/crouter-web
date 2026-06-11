@@ -1,7 +1,9 @@
 /**
  * Graph rail (2a) — left sidebar showing the current node's graph tree and
  * roots of other active graphs ("ELSEWHERE"). Gated on `node.graphRail`.
- * Alt+ArrowUp/Down cycles through the current graph's nodes.
+ * Alt+ArrowUp/Down cycles through the current graph's nodes. Quiet Instrument:
+ * `.graphrail` column with `.gr-sec` headings, `.gnode` rows (`.cur` current,
+ * `.dimmed` dead), `.gd` status dots, `.gflag` blocked/attention pills.
  */
 
 import { useEffect, type ReactNode } from 'react';
@@ -43,59 +45,56 @@ export function GraphRail({ currentId, onNavigate }: Props): ReactNode {
   if (!canRender) return null;
 
   return (
-    <aside
-      className="flex w-[230px] shrink-0 flex-col overflow-y-auto border-r border-border bg-card/50 backdrop-blur-sm"
-      style={{ zIndex: 1 }}
-    >
+    <aside className="graphrail rv" style={{ zIndex: 1, overflowY: 'auto' }}>
       {/* THIS GRAPH */}
-      <SectionHeader label="THIS GRAPH" kbdHint="⌥↑↓" />
-      <div className="flex flex-col py-1">
-        {thisGraph.map(({ node, depth }) => (
-          <NodeRow
-            key={node.node_id}
-            node={node}
-            depth={depth}
-            current={node.node_id === currentId}
-            onClick={() => onNavigate(node.node_id)}
-          />
-        ))}
-        {thisGraph.length === 0 && (
-          <span className="px-3 py-1 font-mono text-[10px] text-muted-foreground/40">—</span>
-        )}
-      </div>
+      <SectionHeader label="This graph" kbdHint="⌥↑↓" />
+      {thisGraph.map(({ node, depth }) => (
+        <NodeRow
+          key={node.node_id}
+          node={node}
+          depth={depth}
+          current={node.node_id === currentId}
+          onClick={() => onNavigate(node.node_id)}
+        />
+      ))}
+      {thisGraph.length === 0 && (
+        <span className="px-[9px] py-1 font-mono text-[10px]" style={{ color: 'var(--dim)' }}>
+          —
+        </span>
+      )}
 
       {/* ELSEWHERE */}
       {otherGraphs.length > 0 && (
         <>
-          <SectionHeader label="ELSEWHERE" kbdHint="" />
-          <div className="flex flex-col py-1">
-            {otherGraphs.map((n) => (
-              <NodeRow
-                key={n.node_id}
-                node={n}
-                depth={0}
-                current={false}
-                elsewhere
-                onClick={() => onNavigate(n.node_id)}
-              />
-            ))}
-          </div>
+          <div className="gr-gap" />
+          <SectionHeader label="Elsewhere" />
+          {otherGraphs.map((n) => (
+            <NodeRow
+              key={n.node_id}
+              node={n}
+              depth={0}
+              current={false}
+              elsewhere
+              onClick={() => onNavigate(n.node_id)}
+            />
+          ))}
         </>
       )}
     </aside>
   );
 }
 
-function SectionHeader({ label, kbdHint }: { label: string; kbdHint: string }): ReactNode {
+function SectionHeader({ label, kbdHint }: { label: string; kbdHint?: string }): ReactNode {
   return (
-    <div className="instlabel flex items-center gap-1.5 border-b border-border/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
-      {label}
-      {kbdHint && (
-        <kbd className="font-mono text-[9px] opacity-40">{kbdHint}</kbd>
-      )}
+    <div className="gr-sec">
+      <span className="instlabel">{label}</span>
+      <div className="rule" />
+      {kbdHint && <span className="hint">{kbdHint}</span>}
     </div>
   );
 }
+
+const DEPTH_CLASS: Record<number, string> = { 1: 'g1', 2: 'g2' };
 
 function NodeRow({
   node,
@@ -113,46 +112,31 @@ function NodeRow({
   const isDead =
     node.status === 'done' || node.status === 'dead' || node.status === 'canceled';
   const isActive = node.status === 'active';
-  const hasAttention = node.attention_count > 0;
+  const blocked = node.attention_count > 0;
+
+  // g1/g2 atoms cover the first two levels; deeper nesting falls back to an
+  // inline indent (14px per level) so the tree never collapses.
+  const depthClass = DEPTH_CLASS[depth];
+  const depthStyle =
+    depth > 2 ? { marginLeft: `${depth * 14}px` } : undefined;
 
   return (
     <button
       type="button"
-      className={cn(
-        'group flex min-w-0 items-center gap-1.5 px-2 py-1 text-left text-xs transition-colors hover:bg-muted/40',
-        current &&
-          'border-l-2 bg-[var(--bone,hsl(45,20%,88%))]/15 border-[var(--bone,hsl(45,20%,88%))]',
-        isDead && 'opacity-40',
-      )}
-      style={{ paddingLeft: `${8 + depth * 16}px` }}
+      className={cn('gnode', depthClass, current && 'cur', isDead && 'dimmed')}
+      style={depthStyle}
       onClick={onClick}
     >
-      {/* Status dot */}
       <span
-        className={cn(
-          'size-1.5 shrink-0 rounded-full',
-          isActive || elsewhere ? 'animate-pulse' : '',
-        )}
-        style={{
-          backgroundColor: elsewhere
-            ? 'var(--status-idle)'
-            : `var(--status-${node.status})`,
-        }}
+        className={cn('gd', (isActive && elsewhere) && 'dot active')}
+        style={
+          blocked
+            ? { background: 'var(--blk)', boxShadow: '0 0 7px rgba(255,94,54,.5)' }
+            : { background: `var(--status-${node.status})` }
+        }
       />
-      {/* Name */}
-      <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{node.name}</span>
-      {/* Attention pill */}
-      {hasAttention && (
-        <span
-          className="shrink-0 rounded px-1 py-0.5 font-mono text-[9px]"
-          style={{
-            color: 'var(--status-idle)',
-            backgroundColor: 'color-mix(in srgb, var(--status-idle) 15%, transparent)',
-          }}
-        >
-          ⚑{node.attention_count}
-        </span>
-      )}
+      <span className="gname">{node.name}</span>
+      {blocked && <span className="gflag">⚑ {node.attention_count}</span>}
     </button>
   );
 }
