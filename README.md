@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@crouton-kit/crouter-web"><img alt="npm" src="https://img.shields.io/npm/v/@crouton-kit/crouter-web?label=npm"></a>
   <a href="https://nodejs.org"><img alt="node" src="https://img.shields.io/badge/node-%3E%3D20-339933"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
 </p>
 
 crouter-web is a local web server and a React app for [crouter](https://github.com/crouton-labs/crouter). It reads the crouter canvas on the machine it runs on and serves a browser UI for it: a list of conversations, a canvas view of every node, an inbox for the human pages nodes send, and a page per node where you read the session and send messages. It uses crouter as a library, so what you see is the same state `crtr` shows.
